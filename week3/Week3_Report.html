@@ -171,10 +171,52 @@ Code Llama as context.</p>
 <h2>Exercise 4 &mdash; Services + Orchestration</h2>
 <p>The application was split into independent services communicating over HTTP APIs:</p>
 <ul>
-  <li><b>Retrieval Service</b> (port 8001) &mdash; exposes <code>/retrieve</code>, returns relevant chunks for a question.</li>
-  <li><b>App / Orchestration Service</b> (port 8000) &mdash; exposes <code>/ask</code>, calls the Retrieval Service,
-      then calls Ollama (the LLM Service, already its own service on port 11434), and returns the final answer.</li>
+  <li><b>App / Orchestration Service</b> (<code>app_service.py</code>, port 8000) &mdash; the "receptionist".
+      This is the only file the user ever directly talks to. It does not answer questions itself &mdash;
+      it coordinates: asks the Retrieval Service what code is relevant, sends that context + the question
+      to Code Llama, and returns the final answer to the user.</li>
+  <li><b>Retrieval Service</b> (<code>retrieval_service.py</code>, port 8001) &mdash; the "librarian".
+      Its only job is search: given a question, it converts it into an embedding, compares it against
+      every chunk in the knowledge base, and returns the top 2 most relevant chunks.</li>
 </ul>
+
+<h3>Request Flow, Step by Step</h3>
+<div class="box">
+<ol>
+  <li>User sends a question to <code>http://localhost:8000/ask</code> &rarr; lands in <code>app_service.py</code>.</li>
+  <li><code>app_service.py</code> immediately calls <code>http://localhost:8001/retrieve</code> &rarr; lands in <code>retrieval_service.py</code>.</li>
+  <li><code>retrieval_service.py</code> embeds the question, compares it against <code>knowledge_base.json</code>,
+      and picks the top 2 most relevant chunks.</li>
+  <li>Those chunks are sent back to <code>app_service.py</code>.</li>
+  <li><code>app_service.py</code> combines the question + retrieved chunks into one prompt and sends it to
+      Ollama (<code>http://localhost:11434</code>) to be answered by Code Llama.</li>
+  <li>Code Llama's answer is returned to <code>app_service.py</code>.</li>
+  <li><code>app_service.py</code> sends that final answer back to the user.</li>
+</ol>
+</div>
+
+<pre>
+User
+  |  (1) POST /ask
+  v
+app_service.py  ----(2) POST /retrieve---->  retrieval_service.py
+                                                    | (3) search knowledge_base.json
+app_service.py  <---(4) top-2 chunks--------  retrieval_service.py
+  |  (5) question + context
+  v
+Ollama / Code Llama
+  |  (6) generated answer
+  v
+app_service.py
+  |  (7) final answer
+  v
+User
+</pre>
+
+<p><code>app_service.py</code> is the only entry point the user calls; it makes two outgoing calls
+of its own (one to Retrieval, one to the LLM) and stitches the results together before replying &mdash;
+this is what "orchestration" means in the assignment's requirements.</p>
+
 <p>Verified end-to-end via:</p>
 <pre>curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" \
   -d '{"question": "Which file handles user authentication?"}'</pre>
