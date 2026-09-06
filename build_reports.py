@@ -376,14 +376,47 @@ refactoring, RAG-based, and repository-level understanding):</p>
 {results_section}
 
 <h2>Exercise 4 &mdash; Analysis</h2>
+
+<h3>Aggregate metrics (all 12 questions)</h3>
+<table>
+  <tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens Generated</th><th>Answered Correctly?</th></tr>
+  <tr><td><code>codellama:7b</code></td><td>50.1s</td><td>249.2</td><td>Yes &mdash; all 12 questions answered relevantly and grounded in retrieved context</td></tr>
+  <tr><td><code>starcoder2:3b</code></td><td>18.7s</td><td>113.7</td><td><b>No &mdash; 0 of 12</b> (see below)</td></tr>
+  <tr><td><code>phi3:mini</code></td><td>40.5s</td><td>324.9</td><td>Yes &mdash; all 12 questions answered relevantly and grounded in retrieved context</td></tr>
+</table>
+
+<h3>Key finding: fastest model was also the least useful</h3>
+<div class="bad">
+<p><b>StarCoder2:3b failed to genuinely answer any of the 12 questions.</b> Instead of responding to the
+question, it repeatedly generated more fake <code>"Question: ... Answer:"</code> text &mdash; effectively
+continuing the prompt's pattern rather than following it as an instruction. Example (Q1, "What does the
+hash_password function do?"):</p>
+<pre>Question: What is the main reason that the hash_password function exists?
+Answer:</pre>
+<p>This happened on all 12/12 questions. The likely cause: <code>starcoder2:3b</code> (as pulled from Ollama's
+default tag) is a base/completion-style model, not instruction-tuned the way <code>codellama:7b</code> and
+<code>phi3:mini</code> are &mdash; so when given a prompt formatted as "Context: ... Question: ... Answer:",
+it treats the whole thing as text to continue rather than a command to follow.</p>
+</div>
+
+<div class="good">
+<p><b><code>codellama:7b</code> and <code>phi3:mini</code> both answered correctly and usefully</b> on every
+question, staying grounded in the retrieved context (e.g. correctly naming <code>auth.py</code>,
+<code>authenticate_user()</code>, and tracing multi-file relationships in Q10/Q11). Between the two:
+<code>phi3:mini</code> was noticeably faster on average (40.5s vs 50.1s) despite generating <i>more</i>
+tokens per answer on average (324.9 vs 249.2) &mdash; suggesting it is simply a more efficient model per
+token on this CPU-only hardware, with comparable answer quality to Code Llama on this small codebase.</p>
+</div>
+
+<h3>Conclusion of Exercise 4</h3>
 <div class="box">
-<p>Based on the aggregate metrics above: smaller models (<code>starcoder2:3b</code>, <code>phi3:mini</code>)
-are expected to show meaningfully lower latency than <code>codellama:7b</code> on this CPU-only VM, since
-fewer parameters means less computation per token. Whether that speed comes at a cost in accuracy or
-increased hallucination is assessed by reading the per-question answers above side-by-side &mdash; look
-specifically for: factual correctness against the real code, whether the model stayed grounded in the
-retrieved context vs. inventing details, and completeness of the answer. Update this section with the
-specific conclusion once the full run has been manually reviewed.</p>
+<p><b>Raw speed is not a valid quality signal on its own.</b> StarCoder2:3b "won" on latency (18.7s avg,
+~2.7x faster than Code Llama) but delivered zero usable answers &mdash; it would be actively harmful to
+deploy despite the attractive speed number. Between the two models that actually worked,
+<code>phi3:mini</code> offered the best practical trade-off for this application: essentially the same
+answer quality as <code>codellama:7b</code>, at meaningfully lower latency. This directly demonstrates the
+assignment's core question &mdash; a quality/latency/resource trade-off exists, but it can only be judged
+correctly by reading actual answers, not by latency numbers alone.</p>
 </div>
 
 <h2>Exercise 5 &mdash; RAG Pipeline Analysis</h2>
@@ -391,15 +424,40 @@ specific conclusion once the full run has been manually reviewed.</p>
 
 <h2>Exercise 6 &mdash; Repository-Level Understanding</h2>
 <p>Two questions in the evaluation set specifically test multi-file/repository-level reasoning
-(category <span class="tag">repo_understanding</span>): "Which files are involved in the user
-authentication flow, end to end?" and "Which components would be affected if the
-<code>authenticate_user</code> function signature changed?" These require the system to connect
-information across <code>auth.py</code>, <code>payment.py</code>, and <code>registration.py</code>
-simultaneously &mdash; see the per-question answers above for how each model handled this. As expected
-for a simple top-<i>k</i> chunk-retrieval RAG system (no dependency graph or call-graph awareness), this
-setup can surface individually relevant files but does not explicitly reason about cross-file call
-relationships &mdash; the kind of capability tools like Sourcegraph (covered in the following week)
-are designed to add.</p>
+(category <span class="tag">repo_understanding</span>): Q10 "Which files are involved in the user
+authentication flow, end to end?" and Q11 "Which components would be affected if the
+<code>authenticate_user</code> function signature changed?" These require connecting information
+across <code>auth.py</code>, <code>payment.py</code>, and <code>registration.py</code> simultaneously.</p>
+
+<div class="good">
+<p><b>Q10 result (codellama:7b):</b> correctly listed all three files &mdash; <code>payment.py</code>
+(uses authentication before processing a payment), <code>auth.py</code> (defines
+<code>authenticate_user()</code>), and <code>registration.py</code> (creates the users that get
+authenticated later). This is a genuinely correct multi-file answer.</p>
+<p><b>Q11 result (codellama:7b):</b> correctly reasoned that changing <code>authenticate_user</code>'s
+signature would require updating its caller in <code>payment.py</code> &mdash; correct dependency
+reasoning across files.</p>
+<p><b>phi3:mini</b> also answered both reasonably, correctly naming <code>registration.py</code> and
+<code>process_payment</code> as dependents, though with slightly more hedging language ("likely contains").</p>
+</div>
+
+<div class="bad">
+<p><b>starcoder2:3b</b> failed both (consistent with its failure on all 12 questions above) &mdash;
+it did not attempt an answer at all.</p>
+</div>
+
+<h3>Honest assessment of this RAG setup's repo-understanding capability</h3>
+<p>The two working models (<code>codellama:7b</code>, <code>phi3:mini</code>) answered both multi-file
+questions correctly here &mdash; but this is a very small codebase (3 files, 6 chunks total), where
+top-2 retrieval is likely to surface most/all relevant files by chance. This setup has <b>no explicit
+dependency graph or call-graph awareness</b> &mdash; it works here because the codebase is small enough
+that similarity-based retrieval happens to find the right pieces, not because the system understands
+"imports" or "calls" as a structured relationship. On a larger, real-world repository with hundreds of
+files, this same top-<i>k</i> similarity approach would likely miss relevant files that are semantically
+dissimilar to the question's wording but structurally connected (e.g. a file three import-hops away).
+This is precisely the gap that dedicated repository-understanding tools like Sourcegraph (covered in the
+following week) are designed to close, by indexing actual code structure rather than relying solely on
+text similarity.</p>
 
 <h2>Conclusion</h2>
 <p>Week 4 confirmed that model choice measurably affects both speed and answer quality on the same
