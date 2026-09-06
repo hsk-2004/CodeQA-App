@@ -69,32 +69,31 @@ def main():
     with open(QUESTIONS_FILE) as f:
         questions = json.load(f)
 
-    results = []
-
+    # Pre-compute retrieval once per question (same context is used for every model).
+    prepared = []
     for q in questions:
-        print(f"\n=== Q{q['id']} [{q['category']}]: {q['question']} ===")
         chunks = retrieve_relevant_chunks(q["question"], knowledge_base)
-        retrieved_from = [c["file"] for c in chunks]
-        prompt = build_prompt(q["question"], chunks)
-
-        entry = {
+        prepared.append({
             "id": q["id"],
             "category": q["category"],
             "question": q["question"],
-            "retrieved_from": retrieved_from,
+            "retrieved_from": [c["file"] for c in chunks],
+            "prompt": build_prompt(q["question"], chunks),
             "models": {}
-        }
+        })
 
-        for model in MODELS:
-            print(f"  -> asking {model} ...")
-            result = ask_model(model, prompt)
+    # Loop model-first so each model loads into memory once and stays warm,
+    # instead of reloading a different model for every question.
+    for model in MODELS:
+        print(f"\n########## MODEL: {model} ##########")
+        for entry in prepared:
+            print(f"  Q{entry['id']} [{entry['category']}]: {entry['question']}")
+            result = ask_model(model, entry["prompt"])
             entry["models"][model] = result
-            print(f"     done in {result['latency_seconds']}s, {result['eval_count']} tokens")
+            print(f"    -> done in {result['latency_seconds']}s, {result['eval_count']} tokens")
 
-        results.append(entry)
-
-        with open(RESULTS_FILE, "w") as f:
-            json.dump(results, f, indent=2)
+            with open(RESULTS_FILE, "w") as f:
+                json.dump(prepared, f, indent=2)
 
     print(f"\nAll done. Results saved to {RESULTS_FILE}")
 
