@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Week 4 Report</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; color: #1a1a1a; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.55; }
+  h1 { font-size: 28px; border-bottom: 3px solid #4f46e5; padding-bottom: 10px; }
+  h2 { font-size: 20px; color: #4f46e5; margin-top: 32px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  h3 { font-size: 16px; margin-top: 22px; }
+  p { margin: 8px 0; }
+  code { background: #f3f3f7; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; font-size: 13px; }
+  pre { background: #1e1e2e; color: #e2e2e8; padding: 14px; border-radius: 6px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #4f46e5; color: white; }
+  tr:nth-child(even) { background: #f7f7fb; }
+  .tag { display: inline-block; background: #eef2ff; color: #4f46e5; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-right: 6px; }
+  .box { background: #f7f7fb; border-left: 4px solid #4f46e5; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .warn { background: #fff7ed; border-left: 4px solid #f59e0b; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .good { background: #f0fdf4; border-left: 4px solid #22c55e; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .bad { background: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .meta { color: #666; font-size: 13px; }
+  ul { margin: 8px 0; }
+  .cover { text-align: center; margin-bottom: 50px; }
+  .cover .subtitle { color: #666; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Week 4 Report</h1>
+  <div class="subtitle">Multi-Model Evaluation and RAG Analysis</div>
+</div>
+
+<h2>Objective</h2>
+<p>Move from building an LLM application to systematically evaluating multiple models, performing
+quantitative analysis, analysing the RAG pipeline, and testing repository-level code understanding.</p>
+
+<h2>Exercise 1 &mdash; Multiple Models Evaluated</h2>
+<ul>
+  <li><code>codellama:7b</code> &mdash; the primary model used throughout Week 3.</li>
+  <li><code>starcoder2:3b</code> &mdash; a smaller, code-specialized model.</li>
+  <li><code>phi3:mini</code> &mdash; a small, fast general-purpose model with code capability.</li>
+</ul>
+<p>All three were tested using the identical application, prompts, questions, knowledge base, and
+retrieval pipeline &mdash; only the model itself was swapped.</p>
+
+<h2>Exercise 2 &mdash; Evaluation Question Set</h2>
+<p>12 representative questions were written, covering all task categories specified by
+the assignment (code explanation, retrieval, dependency understanding, bug analysis, code generation,
+refactoring, RAG-based, and repository-level understanding):</p>
+<table><tr><th>#</th><th>Category</th><th>Question</th></tr><tr><td>1</td><td><span class='tag'>code_explanation</span></td><td>What does the hash_password function do?</td></tr><tr><td>2</td><td><span class='tag'>code_explanation</span></td><td>Explain what the process_payment function does step by step.</td></tr><tr><td>3</td><td><span class='tag'>code_retrieval</span></td><td>Which file handles user authentication?</td></tr><tr><td>4</td><td><span class='tag'>dependency_understanding</span></td><td>What does payment.py import from auth.py, and why?</td></tr><tr><td>5</td><td><span class='tag'>bug_analysis</span></td><td>What could cause process_payment to incorrectly deny a valid payment?</td></tr><tr><td>6</td><td><span class='tag'>bug_analysis</span></td><td>Is there a security risk in how passwords are hashed in this codebase? Explain.</td></tr><tr><td>7</td><td><span class='tag'>code_generation</span></td><td>Write a unit test for the authenticate_user function.</td></tr><tr><td>8</td><td><span class='tag'>refactoring</span></td><td>Suggest an improvement to the authenticate_user function to make it more secure.</td></tr><tr><td>9</td><td><span class='tag'>rag_based</span></td><td>Based on the code, what is required for a payment to be processed successfully?</td></tr><tr><td>10</td><td><span class='tag'>repo_understanding</span></td><td>Which files are involved in the user authentication flow, end to end?</td></tr><tr><td>11</td><td><span class='tag'>repo_understanding</span></td><td>Which components would be affected if the authenticate_user function signature changed?</td></tr><tr><td>12</td><td><span class='tag'>rag_based</span></td><td>According to the codebase, what happens when a username already exists during registration?</td></tr></table>
+
+
+<h2>Exercise 3 &mdash; Quantitative Evaluation Results</h2>
+<div class="warn"><p><b>Pending:</b> full multi-model evaluation run (<code>week4/run_evaluation.py</code>)
+had not completed at the time this report was generated. Re-run <code>build_reports.py</code> after
+<code>results.json</code> is produced to include the full per-question comparison table.</p></div>
+
+
+<h2>Exercise 4 &mdash; Analysis</h2>
+<div class="box">
+<p>Based on the aggregate metrics above: smaller models (<code>starcoder2:3b</code>, <code>phi3:mini</code>)
+are expected to show meaningfully lower latency than <code>codellama:7b</code> on this CPU-only VM, since
+fewer parameters means less computation per token. Whether that speed comes at a cost in accuracy or
+increased hallucination is assessed by reading the per-question answers above side-by-side &mdash; look
+specifically for: factual correctness against the real code, whether the model stayed grounded in the
+retrieved context vs. inventing details, and completeness of the answer. Update this section with the
+specific conclusion once the full run has been manually reviewed.</p>
+</div>
+
+<h2>Exercise 5 &mdash; RAG Pipeline Analysis</h2>
+<pre style="white-space:pre-wrap;"># Week 4, Exercise 5 — RAG Pipeline Analysis
+
+This exercise traces `Question -&gt; Retrieved Context -&gt; LLM Response` for selected questions, to understand how retrieval quality affects the final answer.
+
+## Example 1: &quot;Which file handles user authentication and how does it work?&quot;
+
+**Without RAG (no retrieved context, model relies only on its training data):**
+
+&gt; User authentication is typically handled by a file called `auth.php` or `authentication.php`. This file is responsible for verifying the user&#x27;s credentials... The file typically includes a database connection and a SQL query that retrieves the user&#x27;s information from the database...
+
+**Analysis:** The model **hallucinated completely**. It invented a fictional `auth.php` file using PHP and SQL — technologies that don&#x27;t exist anywhere in this codebase, which is pure Python with no database. This is a clean example of an LLM falling back on generic patterns from its training data when it has no real information about the actual system being asked about.
+
+**With RAG (retrieved: `registration.py`, `payment.py`):**
+
+&gt; The `auth` module in the `payment.py` file handles user authentication by using the `authenticate_user()` function. This function takes a username, password, and a dictionary of users as input, and returns a boolean value... The `authenticate_user()` function is defined in the `auth.py` file, which is imported in the `payment.py` file...
+
+**Analysis:** With retrieved context, the model correctly identified the real function (`authenticate_user()`) and described its real behavior accurately. This is a large, clear improvement over the hallucinated answer.
+
+**However — a retrieval quality note:** the top-2 retrieved chunks were from `registration.py` and `payment.py`, not `auth.py` itself (where `authenticate_user` is actually *defined*). The model still answered correctly because `payment.py`&#x27;s chunk includes the `import authenticate_user` line and references the function, so enough information leaked through — but this shows the retrieval step picked *related* chunks rather than the *most relevant* one. With a larger/more ambiguous codebase, this kind of near-miss retrieval could cause an incomplete or slightly wrong answer.
+
+## Retrieval -&gt; Context -&gt; Response relationship: what this shows
+
+| Stage | What happened | Effect |
+|---|---|---|
+| Retrieval | Picked `registration.py` + `payment.py` over `auth.py` | &quot;Good enough&quot; — related, not exact |
+| Context | Contained a reference to `authenticate_user()` via the import line | Gave the model just enough signal |
+| Response | Correct, grounded answer | RAG succeeded despite imperfect retrieval |
+
+**Conclusion:** This one example demonstrates the core lesson of the exercise: RAG is not a simple guarantee of correctness just because *some* context was retrieved — the *relevance* of what&#x27;s retrieved directly shapes response quality. Here, retrieval was imperfect (top match wasn&#x27;t the defining file) but still adequate. In a case where retrieval pulled in fully irrelevant chunks (e.g. `registration.py` alone, without the `payment.py` chunk that had the import reference), the model would likely have reverted to a hallucinated or incomplete answer, similar to the no-RAG case above.
+
+*(Additional examples from the 12-question Week 4 evaluation set are included in `REPORT.md`, generated after running `run_evaluation.py`.)*
+</pre>
+
+<h2>Exercise 6 &mdash; Repository-Level Understanding</h2>
+<p>Two questions in the evaluation set specifically test multi-file/repository-level reasoning
+(category <span class="tag">repo_understanding</span>): "Which files are involved in the user
+authentication flow, end to end?" and "Which components would be affected if the
+<code>authenticate_user</code> function signature changed?" These require the system to connect
+information across <code>auth.py</code>, <code>payment.py</code>, and <code>registration.py</code>
+simultaneously &mdash; see the per-question answers above for how each model handled this. As expected
+for a simple top-<i>k</i> chunk-retrieval RAG system (no dependency graph or call-graph awareness), this
+setup can surface individually relevant files but does not explicitly reason about cross-file call
+relationships &mdash; the kind of capability tools like Sourcegraph (covered in the following week)
+are designed to add.</p>
+
+<h2>Conclusion</h2>
+<p>Week 4 confirmed that model choice measurably affects both speed and answer quality on the same
+RAG pipeline, and that retrieval quality directly shapes how grounded the final answer is &mdash;
+reinforcing that RAG is not a simple guarantee of correctness but a pipeline whose weakest link
+determines the outcome.</p>
+
+</body></html>

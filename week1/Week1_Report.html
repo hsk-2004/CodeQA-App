@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Week 1 Report</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; color: #1a1a1a; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.55; }
+  h1 { font-size: 28px; border-bottom: 3px solid #4f46e5; padding-bottom: 10px; }
+  h2 { font-size: 20px; color: #4f46e5; margin-top: 32px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  h3 { font-size: 16px; margin-top: 22px; }
+  p { margin: 8px 0; }
+  code { background: #f3f3f7; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; font-size: 13px; }
+  pre { background: #1e1e2e; color: #e2e2e8; padding: 14px; border-radius: 6px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #4f46e5; color: white; }
+  tr:nth-child(even) { background: #f7f7fb; }
+  .tag { display: inline-block; background: #eef2ff; color: #4f46e5; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-right: 6px; }
+  .box { background: #f7f7fb; border-left: 4px solid #4f46e5; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .warn { background: #fff7ed; border-left: 4px solid #f59e0b; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .good { background: #f0fdf4; border-left: 4px solid #22c55e; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .bad { background: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .meta { color: #666; font-size: 13px; }
+  ul { margin: 8px 0; }
+  .cover { text-align: center; margin-bottom: 50px; }
+  .cover .subtitle { color: #666; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Week 1 Report</h1>
+  <div class="subtitle">VM Setup, Static Website, and Git Workflow</div>
+</div>
+
+<h2>Objective</h2>
+<p>Establish the foundational Virtual Machine and Git workflow used throughout this project.</p>
+
+<h2>What Was Done</h2>
+<ul>
+  <li>Set up a Virtual Machine using VMware Workstation Pro, running Ubuntu 26.04 LTS.</li>
+  <li>Configured networking (NAT) and enabled SSH access, allowing the VM to be controlled from the host laptop's terminal.</li>
+  <li>Created a simple static website and hosted it on the VM as a hands-on deployment exercise.</li>
+  <li>Connected the hosted project to a GitHub repository (<code>hsk-2004/CodeQA-App</code>).</li>
+  <li>Made modifications to the hosted site and practiced the complete Git workflow:
+    <code>git add</code> &rarr; <code>git commit</code> &rarr; <code>git push</code>.</li>
+</ul>
+
+<h2>Key Learnings</h2>
+<div class="box">
+  <p><b>VM fundamentals:</b> allocating CPU/RAM/disk, installing an OS, and enabling remote access via SSH.</p>
+  <p><b>Git + GitHub workflow:</b> initializing a repository, committing changes, connecting a remote, and
+  authenticating pushes using a GitHub Personal Access Token (required since GitHub no longer accepts
+  account passwords for Git operations).</p>
+</div>
+
+<h2>Outcome</h2>
+<p>A working Ubuntu VM, reachable via SSH, with Git configured and a GitHub repository ready to receive
+all subsequent work (Weeks 2-4 all build on this same VM and repository).</p>
+
+</body></html>

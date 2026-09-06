@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Week 3 Report</title>
+<style>
+  body { font-family: -apple-system, Segoe UI, Arial, sans-serif; color: #1a1a1a; max-width: 900px; margin: 40px auto; padding: 0 20px; line-height: 1.55; }
+  h1 { font-size: 28px; border-bottom: 3px solid #4f46e5; padding-bottom: 10px; }
+  h2 { font-size: 20px; color: #4f46e5; margin-top: 32px; border-bottom: 1px solid #ddd; padding-bottom: 6px; }
+  h3 { font-size: 16px; margin-top: 22px; }
+  p { margin: 8px 0; }
+  code { background: #f3f3f7; padding: 2px 5px; border-radius: 3px; font-family: Consolas, monospace; font-size: 13px; }
+  pre { background: #1e1e2e; color: #e2e2e8; padding: 14px; border-radius: 6px; overflow-x: auto; font-size: 12.5px; line-height: 1.5; }
+  pre code { background: none; padding: 0; color: inherit; }
+  table { border-collapse: collapse; width: 100%; margin: 14px 0; font-size: 13px; }
+  th, td { border: 1px solid #ddd; padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: #4f46e5; color: white; }
+  tr:nth-child(even) { background: #f7f7fb; }
+  .tag { display: inline-block; background: #eef2ff; color: #4f46e5; padding: 2px 8px; border-radius: 10px; font-size: 11px; font-weight: bold; margin-right: 6px; }
+  .box { background: #f7f7fb; border-left: 4px solid #4f46e5; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .warn { background: #fff7ed; border-left: 4px solid #f59e0b; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .good { background: #f0fdf4; border-left: 4px solid #22c55e; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .bad { background: #fef2f2; border-left: 4px solid #ef4444; padding: 10px 16px; margin: 12px 0; border-radius: 4px; }
+  .meta { color: #666; font-size: 13px; }
+  ul { margin: 8px 0; }
+  .cover { text-align: center; margin-bottom: 50px; }
+  .cover .subtitle { color: #666; font-size: 15px; }
+</style>
+</head>
+<body>
+<div class="cover">
+  <h1>Week 3 Report</h1>
+  <div class="subtitle">Building the RAG-Based Code Q&amp;A Application</div>
+</div>
+
+<h2>Objective</h2>
+<p>Build one progressively-developed application demonstrating the full pipeline:
+<b>Application &rarr; API &rarr; Retrieval/RAG &rarr; Chunking &rarr; Embeddings &rarr;
+Vector Similarity &rarr; Relevant Context &rarr; LLM &rarr; Response</b>, using
+Ollama + Code Llama + APIs + Services + Orchestration + Docker.</p>
+
+<h2>Application Chosen: Code Q&amp;A Assistant</h2>
+<p>An app that answers natural-language questions about a small sample codebase by retrieving
+relevant code chunks and passing them as context to Code Llama.</p>
+
+<h2>Exercise 1 &mdash; Basic LLM Connection</h2>
+<p>A minimal script (<code>exercise1_basic.py</code>) sends a prompt to Ollama's HTTP API
+(<code>/api/generate</code>) and prints Code Llama's response, proving the basic pipeline:
+<code>User &rarr; App &rarr; API &rarr; Ollama &rarr; Code Llama &rarr; Response</code>.</p>
+
+<h2>Exercise 2 &mdash; Knowledge Base (Chunking + Embeddings)</h2>
+<p>A small sample codebase was created to act as the "knowledge" the app answers questions about:</p>
+<h3><code>auth.py</code></h3><pre>import hashlib
+
+def hash_password(password: str) -&gt; str:
+    &quot;&quot;&quot;Hashes a password using SHA-256.&quot;&quot;&quot;
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def authenticate_user(username: str, password: str, users_db: dict) -&gt; bool:
+    &quot;&quot;&quot;Checks if the given username/password matches a stored user record.&quot;&quot;&quot;
+    if username not in users_db:
+        return False
+    return users_db[username] == hash_password(password)
+</pre><h3><code>payment.py</code></h3><pre>from auth import authenticate_user
+
+def process_payment(username: str, password: str, amount: float, users_db: dict) -&gt; str:
+    &quot;&quot;&quot;Processes a payment only if the user is authenticated.&quot;&quot;&quot;
+    if not authenticate_user(username, password, users_db):
+        return &quot;Authentication failed. Payment denied.&quot;
+    if amount &lt;= 0:
+        return &quot;Invalid payment amount.&quot;
+    return f&quot;Payment of ${amount:.2f} processed for {username}.&quot;
+</pre><h3><code>registration.py</code></h3><pre>from auth import hash_password
+
+def register_user(username: str, password: str, users_db: dict) -&gt; str:
+    &quot;&quot;&quot;Registers a new user by storing their hashed password.&quot;&quot;&quot;
+    if username in users_db:
+        return &quot;Username already exists.&quot;
+    users_db[username] = hash_password(password)
+    return f&quot;User {username} registered successfully.&quot;
+</pre>
+
+<p>Each file was split into chunks and converted into embeddings (vector representations of meaning)
+using Ollama's <code>nomic-embed-text</code> model, then saved to <code>knowledge_base.json</code>.</p>
+
+<h3>Full Knowledge Base Contents</h3>
+<table>
+  <tr><th>File</th><th>Chunk #</th><th>Text</th><th>Embedding</th></tr>
+  <tr>
+              <td><code>auth.py</code></td>
+              <td>0</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">import hashlib
+
+def hash_password(password: str) -&gt; str:
+    &quot;&quot;&quot;Hashes a password using SHA-256.&quot;&quot;&quot;
+    return hashlib.sha256(password.encode()).hexdigest()
+
+def authenticate_user(username: str, password: str, users_db: dict) -&gt; bool:
+    &quot;&quot;&quot;Checks if the given username/password matches a stored use</pre></td>
+              <td>768 dimensions</td>
+            </tr><tr>
+              <td><code>auth.py</code></td>
+              <td>1</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">r record.&quot;&quot;&quot;
+    if username not in users_db:
+        return False
+    return users_db[username] == hash_password(password)
+</pre></td>
+              <td>768 dimensions</td>
+            </tr><tr>
+              <td><code>payment.py</code></td>
+              <td>0</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">from auth import authenticate_user
+
+def process_payment(username: str, password: str, amount: float, users_db: dict) -&gt; str:
+    &quot;&quot;&quot;Processes a payment only if the user is authenticated.&quot;&quot;&quot;
+    if not authenticate_user(username, password, users_db):
+        return &quot;Authentication failed. Payment den</pre></td>
+              <td>768 dimensions</td>
+            </tr><tr>
+              <td><code>payment.py</code></td>
+              <td>1</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">ied.&quot;
+    if amount &lt;= 0:
+        return &quot;Invalid payment amount.&quot;
+    return f&quot;Payment of ${amount:.2f} processed for {username}.&quot;
+</pre></td>
+              <td>768 dimensions</td>
+            </tr><tr>
+              <td><code>registration.py</code></td>
+              <td>0</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">from auth import hash_password
+
+def register_user(username: str, password: str, users_db: dict) -&gt; str:
+    &quot;&quot;&quot;Registers a new user by storing their hashed password.&quot;&quot;&quot;
+    if username in users_db:
+        return &quot;Username already exists.&quot;
+    users_db[username] = hash_password(password)
+    return </pre></td>
+              <td>768 dimensions</td>
+            </tr><tr>
+              <td><code>registration.py</code></td>
+              <td>1</td>
+              <td><pre style="margin:0;white-space:pre-wrap;">f&quot;User {username} registered successfully.&quot;
+</pre></td>
+              <td>768 dimensions</td>
+            </tr>
+</table>
+<p class="meta">Note: embedding vectors are 768-dimensional lists of numbers representing each chunk's
+meaning &mdash; shown here as dimension count only, since the raw numbers are not human-readable.</p>
+
+<h2>Exercise 3 &mdash; Retrieval + RAG</h2>
+<p>When a question is asked, it is converted to an embedding and compared (via cosine similarity)
+against every chunk in the knowledge base; the most similar chunks are retrieved and given to
+Code Llama as context.</p>
+
+<h3>Demonstration: With vs. Without RAG</h3>
+<p class="meta">Question: <i>"Which file handles user authentication and how does it work?"</i></p>
+
+<div class="bad">
+  <b>WITHOUT RAG (no retrieved context):</b>
+  <p>"User authentication is typically handled by a file called <code>auth.php</code> or
+  <code>authentication.php</code>... includes a database connection and a SQL query..."</p>
+  <p><b>&#10060; Hallucinated</b> &mdash; invented a fictional PHP/SQL file. This codebase has no PHP or database at all.</p>
+</div>
+
+<div class="good">
+  <b>WITH RAG (retrieved context from registration.py, payment.py):</b>
+  <p>"The <code>auth</code> module in the <code>payment.py</code> file handles user authentication by using the
+  <code>authenticate_user()</code> function... defined in the <code>auth.py</code> file..."</p>
+  <p><b>&#9989; Grounded and accurate</b> &mdash; correctly identified the real function and its real behavior.</p>
+</div>
+
+<h2>Exercise 4 &mdash; Services + Orchestration</h2>
+<p>The application was split into independent services communicating over HTTP APIs:</p>
+<ul>
+  <li><b>Retrieval Service</b> (port 8001) &mdash; exposes <code>/retrieve</code>, returns relevant chunks for a question.</li>
+  <li><b>App / Orchestration Service</b> (port 8000) &mdash; exposes <code>/ask</code>, calls the Retrieval Service,
+      then calls Ollama (the LLM Service, already its own service on port 11434), and returns the final answer.</li>
+</ul>
+<p>Verified end-to-end via:</p>
+<pre>curl -X POST http://localhost:8000/ask -H "Content-Type: application/json" \
+  -d '{"question": "Which file handles user authentication?"}'</pre>
+<p>&rarr; Successfully returned a grounded JSON answer, proving the orchestration works.</p>
+
+<h2>Exercise 5 &mdash; Dockerization</h2>
+<p>The App Service and Retrieval Service were each packaged into Docker containers (via individual
+Dockerfiles) and orchestrated together using <code>docker-compose.yml</code>. Ollama/Code Llama itself
+runs natively on the VM host (not containerized) &mdash; a deliberate choice, since containerizing it would
+require re-downloading the 3.8&nbsp;GB model inside the container for no functional benefit; the containers
+reach it over the network via <code>host.docker.internal</code>.</p>
+<div class="box">
+<p><b>Verified working:</b> <code>docker compose up --build</code> started both containers successfully,
+and the same <code>curl</code> test above returned a correct, grounded answer &mdash; confirming the fully
+containerized services + host-level Ollama architecture works end-to-end.</p>
+</div>
+
+<h2>Conclusion</h2>
+<p>All 5 exercises of Week 3 were completed and verified working: a RAG-based Code Q&amp;A application,
+built progressively from a single script into a multi-service, Dockerized architecture, with clear
+evidence that retrieval-augmented generation meaningfully improves answer grounding compared to the
+LLM alone.</p>
+
+</body></html>
