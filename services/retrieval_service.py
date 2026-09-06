@@ -7,6 +7,7 @@ import os
 
 KB_FILE = os.path.join(os.path.dirname(__file__), "..", "knowledge_base.json")
 EMBED_MODEL = "nomic-embed-text"
+OLLAMA_EMBED_URL = os.environ.get("OLLAMA_EMBED_URL", "http://localhost:11434/api/embeddings")
 TOP_K = 2
 
 app = FastAPI(title="Retrieval Service")
@@ -20,7 +21,7 @@ class QueryRequest(BaseModel):
 
 def get_embedding(text: str) -> list[float]:
     response = requests.post(
-        "http://localhost:11434/api/embeddings",
+        OLLAMA_EMBED_URL,
         json={"model": EMBED_MODEL, "prompt": text}
     )
     response.raise_for_status()

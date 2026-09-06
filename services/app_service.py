@@ -1,9 +1,10 @@
+import os
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
 
-RETRIEVAL_SERVICE_URL = "http://localhost:8001/retrieve"
-OLLAMA_URL = "http://localhost:11434/api/generate"
+RETRIEVAL_SERVICE_URL = os.environ.get("RETRIEVAL_SERVICE_URL", "http://localhost:8001/retrieve")
+OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 LLM_MODEL = "codellama:7b"
 
 app = FastAPI(title="App / Orchestration Service")

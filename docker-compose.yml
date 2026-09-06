@@ -1,0 +1,25 @@
+services:
+  retrieval-service:
+    build:
+      context: .
+      dockerfile: services/Dockerfile.retrieval
+    ports:
+      - "8001:8001"
+    environment:
+      - OLLAMA_EMBED_URL=http://host.docker.internal:11434/api/embeddings
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  app-service:
+    build:
+      context: .
+      dockerfile: services/Dockerfile.app
+    ports:
+      - "8000:8000"
+    environment:
+      - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001/retrieve
+      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - retrieval-service

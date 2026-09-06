@@ -1,0 +1,14 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY knowledge_base.json .
+COPY services/retrieval_service.py services/retrieval_service.py
+COPY services/__init__.py services/__init__.py
+
+EXPOSE 8001
+
+CMD ["uvicorn", "services.retrieval_service:app", "--host", "0.0.0.0", "--port", "8001"]
