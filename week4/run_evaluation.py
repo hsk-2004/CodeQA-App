@@ -3,7 +3,7 @@ import math
 import time
 import requests
 
-KB_FILE = "../knowledge_base.json"
+KB_FILE = "../week3/knowledge_base.json"
 QUESTIONS_FILE = "questions.json"
 RESULTS_FILE = "results.json"
 
