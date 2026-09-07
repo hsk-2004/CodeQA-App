@@ -47,6 +47,18 @@ def retrieve(req: QueryRequest):
     ]
     return {"chunks": top_chunks}
 
+@app.get("/knowledge-base")
+def get_knowledge_base():
+    """Returns the knowledge base contents (file + text only, embeddings omitted -- they're
+    768-dimensional numbers, not human-readable)."""
+    return {
+        "chunks": [
+            {"file": item["file"], "chunk_id": item["chunk_id"], "text": item["text"]}
+            for item in knowledge_base
+        ],
+        "total_chunks": len(knowledge_base),
+    }
+
 @app.get("/health")
 def health():
     return {"status": "ok", "chunks_loaded": len(knowledge_base)}
