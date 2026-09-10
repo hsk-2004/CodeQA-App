@@ -328,13 +328,128 @@ def build_week4():
                 per_q += f"<tr><td><code>{esc(model)}</code></td><td>{res['latency_seconds']}s</td><td>{res['eval_count']}</td><td>{esc(answer)}</td></tr>"
             per_q += "</table>"
 
+        # ---- Category-wise breakdown (per assignment feedback: compare models
+        # separately for each of the 7 task categories, not just overall). ----
+        cat_agg = defaultdict(lambda: defaultdict(lambda: {"latency": [], "tokens": []}))
+        cat_order = []
+        for entry in results:
+            cat = entry["category"]
+            if cat not in cat_order:
+                cat_order.append(cat)
+            for model, res in entry["models"].items():
+                if res.get("latency_seconds") is not None:
+                    cat_agg[cat][model]["latency"].append(res["latency_seconds"])
+                if res.get("eval_count") is not None:
+                    cat_agg[cat][model]["tokens"].append(res["eval_count"])
+
+        CATEGORY_LABELS = {
+            "code_explanation": "Explanation",
+            "code_retrieval": "Code Retrieval",
+            "dependency_understanding": "Dependency Understanding",
+            "bug_analysis": "Bug Analysis",
+            "code_generation": "Code Generation",
+            "refactoring": "Refactoring",
+            "rag_based": "RAG-based Question",
+            "repo_understanding": "Repository Understanding (bonus, Exercise 6)",
+        }
+
+        # Manual quality judgments from reading every answer side-by-side (required
+        # since correctness/hallucination cannot be measured automatically).
+        CATEGORY_VERDICT = {
+            "code_explanation": (
+                "codellama:7b",
+                "Both correctly explained the functions. codellama:7b was more consistent in length/detail; "
+                "phi3:mini was excellent on the short question (Q1) but became very verbose on Q2 (779 tokens, 107s) "
+                "without adding proportionally more useful information. starcoder2:3b did not answer either question."
+            ),
+            "code_retrieval": (
+                "phi3:mini",
+                "phi3:mini gave a direct, correct, minimal answer ('File: auth.py'). codellama:7b was also "
+                "technically correct but phrased it confusingly, implying the authentication logic lives in "
+                "'the registration module' rather than clearly stating auth.py. For a pure retrieval task, "
+                "phi3:mini's precision wins. starcoder2:3b failed to answer."
+            ),
+            "dependency_understanding": (
+                "codellama:7b",
+                "codellama:7b gave a clean, on-topic answer. phi3:mini's answer started correctly but drifted "
+                "into unrelated generated text ('Alice, here's a more complex task...') at the end -- a mild "
+                "hallucination/prompt-leakage artifact that codellama:7b did not exhibit. starcoder2:3b failed to answer."
+            ),
+            "bug_analysis": (
+                "phi3:mini",
+                "On Q5, codellama:7b's answer was internally contradictory (states the bug is denying a valid "
+                "payment when unauthenticated, then says 'the payment can still be processed if the user is not "
+                "authenticated, which is not what is expected' -- confusing/self-contradictory). phi3:mini's answer "
+                "was clearer and covered multiple realistic causes. Both correctly flagged unsalted SHA-256 on Q6. "
+                "starcoder2:3b failed to answer either question."
+            ),
+            "code_generation": (
+                "phi3:mini",
+                "codellama:7b generated a unit test that compares a real SHA-256 hash against a literal string "
+                "'hashed_password' -- this test would actually fail if run, a subtle correctness bug in the "
+                "generated code. phi3:mini's generated test imported the relevant modules correctly; its "
+                "structure looked more usable, though also unverified end-to-end. starcoder2:3b failed to answer."
+            ),
+            "refactoring": (
+                "tie",
+                "Both codellama:7b and phi3:mini suggested valid, comparable improvements (stronger hashing "
+                "algorithms like bcrypt/argon2, adding a salt). No meaningful quality difference observed between "
+                "the two on this task. starcoder2:3b failed to answer."
+            ),
+            "rag_based": (
+                "codellama:7b",
+                "Both models answered correctly and stayed grounded in retrieved context on both questions. "
+                "codellama:7b was more concise and slightly more precise (e.g. explicitly naming both required "
+                "conditions for Q9: authentication AND amount > 0). starcoder2:3b failed to answer."
+            ),
+            "repo_understanding": (
+                "codellama:7b",
+                "Both models correctly identified the multi-file relationships across auth.py, payment.py, and "
+                "registration.py. codellama:7b stated its answer with more confidence and precision; phi3:mini "
+                "hedged ('although not explicitly mentioned in the provided context') despite still reaching the "
+                "right conclusion. starcoder2:3b failed to answer."
+            ),
+        }
+
+        cat_section_html = ""
+        for cat in cat_order:
+            label = CATEGORY_LABELS.get(cat, cat)
+            rows = ""
+            for model in models:
+                d = cat_agg[cat][model]
+                lat = d["latency"]
+                tok = d["tokens"]
+                avg_lat = round(sum(lat) / len(lat), 2) if lat else "N/A"
+                avg_tok = round(sum(tok) / len(tok), 1) if tok else "N/A"
+                rows += f"<tr><td><code>{esc(model)}</code></td><td>{avg_lat}s</td><td>{avg_tok}</td></tr>"
+
+            verdict = CATEGORY_VERDICT.get(cat)
+            verdict_html = ""
+            if verdict:
+                winner, reason = verdict
+                winner_label = "Tie (codellama:7b &asymp; phi3:mini)" if winner == "tie" else f"<code>{esc(winner)}</code>"
+                verdict_html = f"""<div class="box"><p><b>Best model for {esc(label)}:</b> {winner_label}<br>{esc(reason)}</p></div>"""
+
+            cat_section_html += f"""
+<h3>{esc(label)}</h3>
+<table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens</th></tr>{rows}</table>
+{verdict_html}
+"""
+
         results_section = f"""
 <h2>Exercise 3 &mdash; Quantitative Evaluation Results</h2>
-<h3>Aggregate Performance</h3>
+<h3>Aggregate Performance (all categories combined)</h3>
 <table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens Generated</th></tr>{agg_rows}</table>
 <p class="meta">Latency and token counts are measured directly from Ollama's API response for each call
 (CPU-only inference on an 8&nbsp;GB RAM VM). Correctness/relevance/hallucination were scored by manual
-review of each answer below.</p>
+review of each answer.</p>
+
+<h2>Exercise 3 (continued) &mdash; Category-Wise Model Comparison</h2>
+<p>The assignment requires comparing models <b>separately for each task category</b>, not just overall,
+since a model's performance varies significantly by task type. Below, each of the 7 categories is broken
+down individually, with objective metrics (latency, tokens) plus a manual correctness verdict based on
+reading every answer.</p>
+{cat_section_html}
 
 <h2>Exercise 3 (continued) &mdash; Per-Question Answers, All Models</h2>
 {per_q}
@@ -376,6 +491,22 @@ refactoring, RAG-based, and repository-level understanding):</p>
 {results_section}
 
 <h2>Exercise 4 &mdash; Analysis</h2>
+
+<h3>Category-Wise Winners (direct answers to the comparison questions)</h3>
+<table>
+  <tr><th>Category</th><th>Best Model</th></tr>
+  <tr><td>Explanation</td><td><code>codellama:7b</code></td></tr>
+  <tr><td>Code Retrieval</td><td><code>phi3:mini</code></td></tr>
+  <tr><td>Dependency Understanding</td><td><code>codellama:7b</code></td></tr>
+  <tr><td>Bug Analysis</td><td><code>phi3:mini</code></td></tr>
+  <tr><td>Code Generation</td><td><code>phi3:mini</code></td></tr>
+  <tr><td>Refactoring</td><td>Tie (codellama:7b &asymp; phi3:mini)</td></tr>
+  <tr><td>RAG-based Question</td><td><code>codellama:7b</code></td></tr>
+</table>
+<p class="meta"><code>starcoder2:3b</code> is excluded from this table since it did not produce a usable
+answer in any category (see below) &mdash; it cannot be said to "win" or "lose" a category it never
+actually answered. See the per-category sections above (Exercise 3 continued) for the full reasoning
+behind each verdict, based on manually reading every answer side-by-side.</p>
 
 <h3>Aggregate metrics (all 12 questions)</h3>
 <table>
