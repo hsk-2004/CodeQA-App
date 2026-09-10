@@ -1,4 +1,12 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+
   retrieval-service:
     build:
       context: .
@@ -6,9 +14,9 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - OLLAMA_EMBED_URL=http://host.docker.internal:11434/api/embeddings
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - OLLAMA_EMBED_URL=http://ollama:11434/api/embeddings
+    depends_on:
+      - ollama
 
   app-service:
     build:
@@ -18,8 +26,15 @@ services:
       - "8000:8000"
     environment:
       - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001/retrieve
-      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - OLLAMA_URL=http://ollama:11434/api/generate
     depends_on:
       - retrieval-service
+      - ollama
+
+volumes:
+  ollama_data:
+    # Named volume persists Ollama's downloaded models on disk, independent of the
+    # container's lifecycle. Stopping/removing/rebuilding the "ollama" container does
+    # NOT delete this volume -- models are only downloaded once (via `docker compose
+    # exec ollama ollama pull <model>`), and every future container start reuses them
+    # instantly. Only `docker compose down -v` (the -v flag) would delete this volume.

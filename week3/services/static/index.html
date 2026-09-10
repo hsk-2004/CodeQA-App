@@ -201,6 +201,8 @@
   <div class="tabs">
     <button class="tab-btn active" id="tabBtnCompare" onclick="switchTab('compare')">Compare Q&amp;A</button>
     <button class="tab-btn" id="tabBtnKb" onclick="switchTab('kb')">Knowledge Base</button>
+    <button class="tab-btn" id="tabBtnMetrics" onclick="switchTab('metrics')">Metrics</button>
+    <button class="tab-btn" id="tabBtnHistory" onclick="switchTab('history')">History</button>
   </div>
 
   <div class="tab-panel active" id="tabCompare">
@@ -247,6 +249,16 @@
     <div id="kbList"></div>
   </div>
 
+  <div class="tab-panel" id="tabMetrics">
+    <div class="kb-summary" id="metricsSummary">Loading Week 4 evaluation metrics...</div>
+    <div id="metricsContent"></div>
+  </div>
+
+  <div class="tab-panel" id="tabHistory">
+    <div class="kb-summary" id="historySummary">No questions asked yet this session.</div>
+    <div id="historyList"></div>
+  </div>
+
 </div>
 
 <script>
@@ -257,14 +269,20 @@ function escapeHtml(s) {
 }
 
 let kbLoaded = false;
+let metricsLoaded = false;
+const TABS = ['compare', 'kb', 'metrics', 'history'];
 
 function switchTab(name) {
-  document.getElementById('tabCompare').classList.toggle('active', name === 'compare');
-  document.getElementById('tabKb').classList.toggle('active', name === 'kb');
-  document.getElementById('tabBtnCompare').classList.toggle('active', name === 'compare');
-  document.getElementById('tabBtnKb').classList.toggle('active', name === 'kb');
+  TABS.forEach(t => {
+    document.getElementById('tab' + capitalize(t)).classList.toggle('active', t === name);
+    document.getElementById('tabBtn' + capitalize(t)).classList.toggle('active', t === name);
+  });
   if (name === 'kb' && !kbLoaded) loadKnowledgeBase();
+  if (name === 'metrics' && !metricsLoaded) loadMetrics();
+  if (name === 'history') loadHistory();
 }
+
+function capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 async function loadKnowledgeBase() {
   const summary = document.getElementById('kbSummary');
@@ -292,6 +310,90 @@ async function loadKnowledgeBase() {
 
 function fill(el) {
   document.getElementById('question').value = el.textContent;
+}
+
+async function loadMetrics() {
+  const summary = document.getElementById('metricsSummary');
+  const content = document.getElementById('metricsContent');
+  try {
+    const res = await fetch('/metrics');
+    if (!res.ok) throw new Error('Request failed: ' + res.status);
+    const data = await res.json();
+
+    if (!data.available) {
+      summary.textContent = data.message;
+      return;
+    }
+    metricsLoaded = true;
+    summary.textContent = `Week 4 evaluation: ${data.total_questions} questions x ${data.models.length} models.`;
+
+    const overallRows = data.models.map(m => {
+      const s = data.overall[m];
+      return `<tr><td class="kb-file">${escapeHtml(m)}</td><td>${s.avg_latency_seconds ?? '-'}s</td><td>${s.avg_tokens ?? '-'}</td><td>${s.questions_answered}</td></tr>`;
+    }).join('');
+
+    let html = `
+      <div class="kb-card">
+        <div class="kb-card-header"><span class="kb-file">Overall (all categories)</span></div>
+        <table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens</th><th>Questions</th></tr>${overallRows}</table>
+      </div>
+    `;
+
+    for (const [catKey, cat] of Object.entries(data.by_category)) {
+      const rows = data.models.map(m => {
+        const s = cat.models[m];
+        return `<tr><td class="kb-file">${escapeHtml(m)}</td><td>${s.avg_latency_seconds ?? '-'}s</td><td>${s.avg_tokens ?? '-'}</td><td>${s.questions_answered}</td></tr>`;
+      }).join('');
+      html += `
+        <div class="kb-card">
+          <div class="kb-card-header"><span class="kb-file">${escapeHtml(cat.label)}</span></div>
+          <table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens</th><th>Questions</th></tr>${rows}</table>
+        </div>
+      `;
+    }
+    content.innerHTML = html;
+  } catch (err) {
+    summary.textContent = 'Error loading metrics: ' + err.message;
+  }
+}
+
+async function loadHistory() {
+  const summary = document.getElementById('historySummary');
+  const list = document.getElementById('historyList');
+  try {
+    const res = await fetch('/history');
+    if (!res.ok) throw new Error('Request failed: ' + res.status);
+    const data = await res.json();
+
+    if (data.total === 0) {
+      summary.textContent = 'No questions asked yet this session. Ask something in the Compare Q&A tab.';
+      list.innerHTML = '';
+      return;
+    }
+    summary.textContent = `${data.total} question(s) asked this session (most recent first).`;
+    list.innerHTML = data.entries.map(e => `
+      <div class="kb-card">
+        <div class="kb-card-header">
+          <span class="kb-file">${escapeHtml(e.question)}</span>
+          <span class="kb-chunk-id">${new Date(e.timestamp).toLocaleString()}</span>
+        </div>
+        <div class="columns">
+          <div>
+            <div class="panel-header"><span class="badge no-rag">WITHOUT RAG</span><span class="latency">${e.without_rag.latency_seconds}s</span></div>
+            <div class="kb-code">${escapeHtml(e.without_rag.answer.trim())}</div>
+          </div>
+          <div>
+            <div class="panel-header"><span class="badge rag">WITH RAG</span><span class="latency">${e.with_rag.latency_seconds}s</span></div>
+            <div class="kb-code">${escapeHtml(e.with_rag.answer.trim())}</div>
+            <div class="retrieved-title" style="margin-top:8px;">Retrieved from</div>
+            ${e.with_rag.retrieved_from.map(f => `<span class="file-tag">${escapeHtml(f)}</span>`).join('')}
+          </div>
+        </div>
+      </div>
+    `).join('');
+  } catch (err) {
+    summary.textContent = 'Error loading history: ' + err.message;
+  }
 }
 
 async function ask() {

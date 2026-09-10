@@ -1,0 +1,14 @@
+[
+  {"id": 1, "category": "code_explanation", "question": "What does the hash_password function do?"},
+  {"id": 2, "category": "code_explanation", "question": "Explain what the process_payment function does step by step."},
+  {"id": 3, "category": "code_retrieval", "question": "Which file handles user authentication?"},
+  {"id": 4, "category": "dependency_understanding", "question": "What does payment.py import from auth.py, and why?"},
+  {"id": 5, "category": "bug_analysis", "question": "What could cause process_payment to incorrectly deny a valid payment?"},
+  {"id": 6, "category": "bug_analysis", "question": "Is there a security risk in how passwords are hashed in this codebase? Explain."},
+  {"id": 7, "category": "code_generation", "question": "Write a unit test for the authenticate_user function."},
+  {"id": 8, "category": "refactoring", "question": "Suggest an improvement to the authenticate_user function to make it more secure."},
+  {"id": 9, "category": "rag_based", "question": "Based on the code, what is required for a payment to be processed successfully?"},
+  {"id": 10, "category": "repo_understanding", "question": "Which files are involved in the user authentication flow, end to end?"},
+  {"id": 11, "category": "repo_understanding", "question": "Which components would be affected if the authenticate_user function signature changed?"},
+  {"id": 12, "category": "rag_based", "question": "According to the codebase, what happens when a username already exists during registration?"}
+]

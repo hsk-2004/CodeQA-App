@@ -1,5 +1,8 @@
+import json
 import os
 import time
+from collections import defaultdict
+from datetime import datetime, timezone
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -10,7 +13,25 @@ RETRIEVAL_SERVICE_BASE = RETRIEVAL_SERVICE_URL.rsplit("/", 1)[0]
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
 LLM_MODEL = os.environ.get("LLM_MODEL", "codellama:7b")
 
+EVAL_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "eval_data")
+EVAL_RESULTS_FILE = os.path.join(EVAL_DATA_DIR, "results.json")
+
+CATEGORY_LABELS = {
+    "code_explanation": "Explanation",
+    "code_retrieval": "Code Retrieval",
+    "dependency_understanding": "Dependency Understanding",
+    "bug_analysis": "Bug Analysis",
+    "code_generation": "Code Generation",
+    "refactoring": "Refactoring",
+    "rag_based": "RAG-based Question",
+    "repo_understanding": "Repository Understanding",
+}
+
 app = FastAPI(title="App / Orchestration Service")
+
+# In-memory log of every question actually asked through this running UI
+# (separate from the offline Week 4 evaluation dataset in eval_data/).
+live_history: list[dict] = []
 
 class AskRequest(BaseModel):
     question: str
@@ -65,7 +86,7 @@ def compare(req: AskRequest):
     prompt_with_context = build_prompt_with_context(req.question, chunks)
     with_rag = call_llm(prompt_with_context)
 
-    return {
+    result = {
         "question": req.question,
         "without_rag": {
             "answer": without_rag["answer"],
@@ -80,6 +101,13 @@ def compare(req: AskRequest):
         "model": LLM_MODEL,
     }
 
+    live_history.insert(0, {
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        **result,
+    })
+
+    return result
+
 @app.get("/knowledge-base")
 def knowledge_base():
     """Proxies the Retrieval Service's knowledge base contents, so the browser
@@ -87,6 +115,63 @@ def knowledge_base():
     response = requests.get(f"{RETRIEVAL_SERVICE_BASE}/knowledge-base")
     response.raise_for_status()
     return response.json()
+
+@app.get("/history")
+def history():
+    """Live log of every question asked through this UI's Compare tab this session
+    (in-memory only -- resets when the container restarts)."""
+    return {"total": len(live_history), "entries": live_history}
+
+@app.get("/metrics")
+def metrics():
+    """Week 4 offline multi-model evaluation results, broken down per category
+    (Explanation, Code Retrieval, Dependency Understanding, Bug Analysis,
+    Code Generation, Refactoring, RAG-based Question)."""
+    if not os.path.exists(EVAL_RESULTS_FILE):
+        return {"available": False, "message": "No evaluation results found. Run week4/run_evaluation.py first."}
+
+    with open(EVAL_RESULTS_FILE) as f:
+        results = json.load(f)
+
+    models = sorted({m for entry in results for m in entry["models"]})
+
+    overall = defaultdict(lambda: {"latency": [], "tokens": []})
+    by_category = defaultdict(lambda: defaultdict(lambda: {"latency": [], "tokens": []}))
+    category_order = []
+
+    for entry in results:
+        cat = entry["category"]
+        if cat not in category_order:
+            category_order.append(cat)
+        for model, res in entry["models"].items():
+            if res.get("latency_seconds") is not None:
+                overall[model]["latency"].append(res["latency_seconds"])
+                by_category[cat][model]["latency"].append(res["latency_seconds"])
+            if res.get("eval_count") is not None:
+                overall[model]["tokens"].append(res["eval_count"])
+                by_category[cat][model]["tokens"].append(res["eval_count"])
+
+    def summarize(d):
+        lat, tok = d["latency"], d["tokens"]
+        return {
+            "avg_latency_seconds": round(sum(lat) / len(lat), 2) if lat else None,
+            "avg_tokens": round(sum(tok) / len(tok), 1) if tok else None,
+            "questions_answered": len(lat),
+        }
+
+    return {
+        "available": True,
+        "total_questions": len(results),
+        "models": models,
+        "overall": {model: summarize(overall[model]) for model in models},
+        "by_category": {
+            cat: {
+                "label": CATEGORY_LABELS.get(cat, cat),
+                "models": {model: summarize(by_category[cat][model]) for model in models},
+            }
+            for cat in category_order
+        },
+    }
 
 @app.get("/health")
 def health():
