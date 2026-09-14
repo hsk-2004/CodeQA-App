@@ -176,6 +176,47 @@
     overflow-x: auto;
   }
   .kb-summary { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
+
+  .verdict-badge {
+    display: inline-block; font-size: 10.5px; font-weight: 700;
+    padding: 3px 8px; border-radius: 10px; letter-spacing: 0.3px; text-transform: uppercase;
+  }
+  .verdict-correct { background: rgba(34,197,94,0.15); color: var(--good); }
+  .verdict-partial { background: rgba(245,158,11,0.15); color: #f59e0b; }
+  .verdict-incorrect, .verdict-no_answer { background: rgba(239,68,68,0.15); color: var(--bad); }
+  .verdict-unscored { background: rgba(139,145,165,0.15); color: var(--muted); }
+  .halluc-flag { color: var(--bad); font-size: 11px; margin-left: 6px; }
+
+  details.definitions { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 10px; padding: 14px 18px; margin-bottom: 22px; }
+  details.definitions summary { cursor: pointer; font-weight: 700; font-size: 13.5px; color: var(--accent); }
+  details.definitions dl { margin: 12px 0 0; }
+  details.definitions dt { font-weight: 700; color: var(--text); font-size: 13px; margin-top: 10px; text-transform: capitalize; }
+  details.definitions dd { margin: 3px 0 0; color: var(--muted); font-size: 12.5px; line-height: 1.5; }
+
+  .cat-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 18px 0; }
+  .cat-filter button {
+    padding: 6px 13px; font-size: 12px; font-weight: 600;
+    background: var(--panel); border: 1px solid var(--panel-border); color: var(--muted); border-radius: 20px;
+  }
+  .cat-filter button.active { background: var(--accent); color: white; border-color: var(--accent); }
+
+  .qcard { background: var(--panel); border: 1px solid var(--panel-border); border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+  .qcard-title { font-size: 14.5px; font-weight: 600; margin-bottom: 4px; }
+  .qcard-meta { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; }
+  .model-row {
+    display: grid; grid-template-columns: 130px 1fr; gap: 12px;
+    padding: 10px 0; border-top: 1px solid var(--panel-border);
+  }
+  .model-row:first-of-type { border-top: none; }
+  .model-name { font-family: Consolas, monospace; font-size: 12.5px; color: var(--accent); font-weight: 700; }
+  .model-stats { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .model-answer {
+    font-size: 12.5px; color: #d4d8e6; background: var(--code-bg); border: 1px solid var(--panel-border);
+    border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; max-height: 140px; overflow-y: auto;
+  }
+  .model-notes { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-style: italic; }
+
+  .stat-table td.num, .stat-table th.num { text-align: right; }
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
@@ -201,7 +242,7 @@
   <div class="tabs">
     <button class="tab-btn active" id="tabBtnCompare" onclick="switchTab('compare')">Compare Q&amp;A</button>
     <button class="tab-btn" id="tabBtnKb" onclick="switchTab('kb')">Knowledge Base</button>
-    <button class="tab-btn" id="tabBtnMetrics" onclick="switchTab('metrics')">Metrics</button>
+    <button class="tab-btn" id="tabBtnMetrics" onclick="switchTab('metrics')">Week 4 Evaluation</button>
     <button class="tab-btn" id="tabBtnHistory" onclick="switchTab('history')">History</button>
   </div>
 
@@ -251,7 +292,17 @@
 
   <div class="tab-panel" id="tabMetrics">
     <div class="kb-summary" id="metricsSummary">Loading Week 4 evaluation metrics...</div>
+
+    <details class="definitions" id="definitionsPanel" style="display:none;">
+      <summary>How each metric is calculated</summary>
+      <dl id="definitionsList"></dl>
+    </details>
+
     <div id="metricsContent"></div>
+
+    <h3 style="margin-top:36px;">Per-Question Breakdown, All Models</h3>
+    <div class="cat-filter" id="catFilter"></div>
+    <div id="questionsContent"></div>
   </div>
 
   <div class="tab-panel" id="tabHistory">
@@ -312,6 +363,21 @@ function fill(el) {
   document.getElementById('question').value = el.textContent;
 }
 
+function statRow(model, s) {
+  const acc = s.accuracy_pct !== null && s.accuracy_pct !== undefined ? `${s.accuracy_pct}%` : '-';
+  const hall = s.hallucination_rate_pct !== null && s.hallucination_rate_pct !== undefined ? `${s.hallucination_rate_pct}%` : '-';
+  return `<tr>
+    <td class="kb-file">${escapeHtml(model)}</td>
+    <td class="num">${acc}</td>
+    <td class="num">${hall}</td>
+    <td class="num">${s.avg_latency_seconds ?? '-'}s</td>
+    <td class="num">${s.avg_tokens ?? '-'}</td>
+    <td class="num">${s.questions_answered}</td>
+  </tr>`;
+}
+
+const STAT_HEADER = `<tr><th>Model</th><th class="num">Accuracy</th><th class="num">Hallucination Rate</th><th class="num">Avg Latency</th><th class="num">Avg Tokens</th><th class="num">Questions</th></tr>`;
+
 async function loadMetrics() {
   const summary = document.getElementById('metricsSummary');
   const content = document.getElementById('metricsContent');
@@ -325,29 +391,37 @@ async function loadMetrics() {
       return;
     }
     metricsLoaded = true;
-    summary.textContent = `Week 4 evaluation: ${data.total_questions} questions x ${data.models.length} models.`;
+    summary.textContent = `Week 4 evaluation: ${data.total_questions} questions x ${data.models.length} models, compared category-by-category (not just overall).`;
 
-    const overallRows = data.models.map(m => {
-      const s = data.overall[m];
-      return `<tr><td class="kb-file">${escapeHtml(m)}</td><td>${s.avg_latency_seconds ?? '-'}s</td><td>${s.avg_tokens ?? '-'}</td><td>${s.questions_answered}</td></tr>`;
-    }).join('');
+    // Metric definitions panel
+    try {
+      const evalRes = await fetch('/evaluation');
+      const evalData = await evalRes.json();
+      if (evalData.available && evalData.metric_definitions) {
+        const defs = evalData.metric_definitions;
+        document.getElementById('definitionsList').innerHTML = Object.entries(defs).map(([k, v]) =>
+          `<dt>${escapeHtml(k.replace(/_/g, ' '))}</dt><dd>${escapeHtml(v)}</dd>`
+        ).join('');
+        document.getElementById('definitionsPanel').style.display = 'block';
+      }
+      renderQuestions(evalData);
+    } catch (e) { /* metric definitions / questions are best-effort */ }
+
+    const overallRows = data.models.map(m => statRow(m, data.overall[m])).join('');
 
     let html = `
       <div class="kb-card">
-        <div class="kb-card-header"><span class="kb-file">Overall (all categories)</span></div>
-        <table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens</th><th>Questions</th></tr>${overallRows}</table>
+        <div class="kb-card-header"><span class="kb-file">Overall (all categories combined)</span></div>
+        <table class="stat-table"><tr>${STAT_HEADER}</tr>${overallRows}</table>
       </div>
     `;
 
     for (const [catKey, cat] of Object.entries(data.by_category)) {
-      const rows = data.models.map(m => {
-        const s = cat.models[m];
-        return `<tr><td class="kb-file">${escapeHtml(m)}</td><td>${s.avg_latency_seconds ?? '-'}s</td><td>${s.avg_tokens ?? '-'}</td><td>${s.questions_answered}</td></tr>`;
-      }).join('');
+      const rows = data.models.map(m => statRow(m, cat.models[m])).join('');
       html += `
         <div class="kb-card">
           <div class="kb-card-header"><span class="kb-file">${escapeHtml(cat.label)}</span></div>
-          <table><tr><th>Model</th><th>Avg Latency</th><th>Avg Tokens</th><th>Questions</th></tr>${rows}</table>
+          <table class="stat-table"><tr>${STAT_HEADER}</tr>${rows}</table>
         </div>
       `;
     }
@@ -355,6 +429,65 @@ async function loadMetrics() {
   } catch (err) {
     summary.textContent = 'Error loading metrics: ' + err.message;
   }
+}
+
+let allEvalQuestions = [];
+let activeCategory = 'all';
+
+function renderQuestions(evalData) {
+  if (!evalData.available) return;
+  allEvalQuestions = evalData.questions;
+
+  const cats = ['all', ...new Set(allEvalQuestions.map(q => q.category))];
+  const catFilter = document.getElementById('catFilter');
+  catFilter.innerHTML = cats.map(c => {
+    const label = c === 'all' ? 'All Categories' : (allEvalQuestions.find(q => q.category === c)?.category_label || c);
+    return `<button class="${c === activeCategory ? 'active' : ''}" onclick="setCategory('${c}', this)">${escapeHtml(label)}</button>`;
+  }).join('');
+
+  renderQuestionCards();
+}
+
+function setCategory(cat, el) {
+  activeCategory = cat;
+  document.querySelectorAll('.cat-filter button').forEach(b => b.classList.remove('active'));
+  el.classList.add('active');
+  renderQuestionCards();
+}
+
+function renderQuestionCards() {
+  const container = document.getElementById('questionsContent');
+  const filtered = activeCategory === 'all' ? allEvalQuestions : allEvalQuestions.filter(q => q.category === activeCategory);
+
+  container.innerHTML = filtered.map(q => {
+    const modelRows = Object.entries(q.models).map(([model, m]) => {
+      const hallTag = m.hallucinated ? '<span class="halluc-flag">&#9888; hallucinated</span>' : '';
+      return `
+        <div class="model-row">
+          <div>
+            <div class="model-name">${escapeHtml(model)}</div>
+            <span class="verdict-badge verdict-${m.verdict}">${escapeHtml(m.verdict.replace('_',' '))}</span>${hallTag}
+            <div class="model-stats">${m.latency_seconds ?? '-'}s &middot; ${m.tokens ?? '-'} tokens</div>
+          </div>
+          <div>
+            <div class="model-answer">${escapeHtml((m.answer || '').trim() || '(no answer)')}</div>
+            ${m.notes ? `<div class="model-notes">${escapeHtml(m.notes)}</div>` : ''}
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    return `
+      <div class="qcard">
+        <div class="qcard-title">Q${q.id}: ${escapeHtml(q.question)}</div>
+        <div class="qcard-meta">
+          <span class="badge rag">${escapeHtml(q.category_label)}</span>
+          <span class="meta" style="color:var(--muted);font-size:12px;">Retrieved from: ${q.retrieved_from.map(escapeHtml).join(', ')}</span>
+        </div>
+        ${modelRows}
+      </div>
+    `;
+  }).join('');
 }
 
 async function loadHistory() {

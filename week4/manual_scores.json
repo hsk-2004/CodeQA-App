@@ -1,0 +1,110 @@
+{
+  "metric_definitions": {
+    "correctness": "Manually judged by comparing the model's answer against the actual sample_codebase source files. Scored as: correct (fully matches the real code/logic), partial (mostly right but has an imprecision, hedge, or a subtly wrong detail), or incorrect/no_answer (wrong, contradictory, or did not actually respond to the question).",
+    "hallucination": "Flagged true if the answer states something not present in / contradicted by the actual codebase (e.g. inventing a file, function, or fact that doesn't exist), or if the model ignored the question and generated unrelated text instead.",
+    "relevance": "Whether the answer actually addresses the specific question asked, using the retrieved context, rather than giving a generic or off-topic response.",
+    "retrieval_quality": "Whether the top-2 chunks returned by the Retrieval Service (cosine similarity over embeddings) actually contained the information needed to answer the question correctly.",
+    "test_pass_rate": "For code_generation questions only: whether the generated test/code would actually run correctly against the real functions (checked by manual inspection, not execution, given time constraints).",
+    "response_latency": "Wall-clock time in seconds from sending the prompt to Ollama's /api/generate endpoint to receiving the full (non-streamed) response, measured in the evaluation script.",
+    "token_usage": "The eval_count field returned by Ollama's API for each response -- the number of tokens the model generated for that answer.",
+    "resource_consumption": "All three models run via the same Ollama process on the same CPU-only VM (8GB RAM, 2 vCPU) -- resource use was observed via `docker stats` / `ollama ps` during the largest model (codellama:7b) generation (peaked near 100% of one CPU core, ~4-5GB RAM while the model was loaded), rather than isolated per-model, since Ollama serves one model at a time from a shared process on this hardware."
+  },
+  "questions": [
+    {
+      "id": 1, "category": "code_explanation",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Accurately describes SHA-256 hashing behavior."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new fake question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Concise, accurate, correctly ties it to password verification."}
+      }
+    },
+    {
+      "id": 2, "category": "code_explanation",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Correct step-by-step breakdown, concise."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Echoed prompt instructions instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Correct but very verbose (779 tokens) for the same information."}
+      }
+    },
+    {
+      "id": 3, "category": "code_retrieval",
+      "scores": {
+        "codellama:7b": {"verdict": "partial", "hallucinated": false, "notes": "Names auth.py correctly but phrasing implies it's 'imported in the registration module', which is a confusing/imprecise framing."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Direct, minimal, fully correct: 'File: auth.py'."}
+      }
+    },
+    {
+      "id": 4, "category": "dependency_understanding",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Clean, accurate, stayed on-topic throughout."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "partial", "hallucinated": true, "notes": "Correct start, but answer trails off into unrelated generated text ('Alice, here's a more complex task...') -- a mild hallucination/prompt-leakage artifact."}
+      }
+    },
+    {
+      "id": 5, "category": "bug_analysis",
+      "scores": {
+        "codellama:7b": {"verdict": "incorrect", "hallucinated": false, "notes": "Self-contradictory: says the bug is denying valid payments when unauthenticated, then says the payment 'can still be processed if not authenticated, which is not what is expected' -- confused reasoning."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Clear, covers multiple realistic causes without contradiction."}
+      }
+    },
+    {
+      "id": 6, "category": "bug_analysis",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Correctly identifies unsalted SHA-256 as the security risk."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Also correctly identifies lack of salting, with more detail."}
+      }
+    },
+    {
+      "id": 7, "category": "code_generation",
+      "scores": {
+        "codellama:7b": {"verdict": "partial", "hallucinated": false, "notes": "Generated test compares a real SHA-256 hash against the literal string 'hashed_password' -- this assertion would actually fail if run. test_pass_rate: fail.", "test_pass": false},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering.", "test_pass": false},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Imports and structure look correct and runnable (not executed, but no obvious bug like codellama's).", "test_pass": true}
+      }
+    },
+    {
+      "id": 8, "category": "refactoring",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Valid suggestion: bcrypt/argon2 instead of raw SHA-256."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Valid, more detailed suggestions (complexity checks, salting)."}
+      }
+    },
+    {
+      "id": 9, "category": "rag_based",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Precisely names both real conditions: authentication AND amount > 0."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Correct, grounded in retrieved context, slightly less precise than codellama."}
+      }
+    },
+    {
+      "id": 10, "category": "repo_understanding",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Correctly lists all 3 files (auth.py, payment.py, registration.py) with accurate roles."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "partial", "hallucinated": false, "notes": "Correct files named, but hedges with 'although not explicitly mentioned in the provided context' despite reaching the right answer."}
+      }
+    },
+    {
+      "id": 11, "category": "repo_understanding",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Correctly identifies payment.py as the dependent that would need updating."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Also correctly identifies process_payment as the affected caller."}
+      }
+    },
+    {
+      "id": 12, "category": "rag_based",
+      "scores": {
+        "codellama:7b": {"verdict": "correct", "hallucinated": false, "notes": "Correct and concise."},
+        "starcoder2:3b": {"verdict": "no_answer", "hallucinated": true, "notes": "Generated a new question instead of answering."},
+        "phi3:mini": {"verdict": "correct", "hallucinated": false, "notes": "Correct, slightly more verbose."}
+      }
+    }
+  ]
+}

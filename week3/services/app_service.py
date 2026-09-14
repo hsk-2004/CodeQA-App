@@ -15,6 +15,7 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "codellama:7b")
 
 EVAL_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "eval_data")
 EVAL_RESULTS_FILE = os.path.join(EVAL_DATA_DIR, "results.json")
+EVAL_SCORES_FILE = os.path.join(EVAL_DATA_DIR, "manual_scores.json")
 
 CATEGORY_LABELS = {
     "code_explanation": "Explanation",
@@ -159,18 +160,120 @@ def metrics():
             "questions_answered": len(lat),
         }
 
+    # Merge in manual correctness/hallucination scoring, if available.
+    scores_by_qid = {}
+    if os.path.exists(EVAL_SCORES_FILE):
+        with open(EVAL_SCORES_FILE) as f:
+            scores_by_qid = {q["id"]: q["scores"] for q in json.load(f)["questions"]}
+
+    def quality_summary(entries_for_model_in_scope):
+        """entries_for_model_in_scope: list of (question_id, model) pairs."""
+        total = len(entries_for_model_in_scope)
+        if total == 0:
+            return {"correct": 0, "partial": 0, "incorrect_or_no_answer": 0,
+                    "accuracy_pct": None, "hallucination_rate_pct": None}
+        correct = partial = bad = hallucinated = 0
+        for qid, model in entries_for_model_in_scope:
+            s = scores_by_qid.get(qid, {}).get(model)
+            if not s:
+                continue
+            if s["verdict"] == "correct":
+                correct += 1
+            elif s["verdict"] == "partial":
+                partial += 1
+            else:
+                bad += 1
+            if s.get("hallucinated"):
+                hallucinated += 1
+        return {
+            "correct": correct,
+            "partial": partial,
+            "incorrect_or_no_answer": bad,
+            "accuracy_pct": round(100 * correct / total, 1),
+            "hallucination_rate_pct": round(100 * hallucinated / total, 1),
+        }
+
+    overall_quality = {
+        model: quality_summary([(e["id"], model) for e in results])
+        for model in models
+    }
+    by_category_quality = {
+        cat: {
+            model: quality_summary([(e["id"], model) for e in results if e["category"] == cat])
+            for model in models
+        }
+        for cat in category_order
+    }
+
     return {
         "available": True,
         "total_questions": len(results),
         "models": models,
-        "overall": {model: summarize(overall[model]) for model in models},
+        "overall": {
+            model: {**summarize(overall[model]), **overall_quality[model]}
+            for model in models
+        },
         "by_category": {
             cat: {
                 "label": CATEGORY_LABELS.get(cat, cat),
-                "models": {model: summarize(by_category[cat][model]) for model in models},
+                "models": {
+                    model: {**summarize(by_category[cat][model]), **by_category_quality[cat][model]}
+                    for model in models
+                },
             }
             for cat in category_order
         },
+    }
+
+@app.get("/evaluation")
+def evaluation():
+    """Full per-question, per-model breakdown: answer text, latency, tokens,
+    manual correctness verdict, and hallucination flag -- everything needed
+    to inspect the Week 4 evaluation in detail."""
+    if not os.path.exists(EVAL_RESULTS_FILE):
+        return {"available": False, "message": "No evaluation results found. Run week4/run_evaluation.py first."}
+
+    with open(EVAL_RESULTS_FILE) as f:
+        results = json.load(f)
+
+    scores_by_qid = {}
+    metric_definitions = {}
+    if os.path.exists(EVAL_SCORES_FILE):
+        with open(EVAL_SCORES_FILE) as f:
+            scores_data = json.load(f)
+            scores_by_qid = {q["id"]: q["scores"] for q in scores_data["questions"]}
+            metric_definitions = scores_data.get("metric_definitions", {})
+
+    models = sorted({m for entry in results for m in entry["models"]})
+
+    questions = []
+    for entry in results:
+        model_data = {}
+        for model in models:
+            res = entry["models"].get(model, {})
+            score = scores_by_qid.get(entry["id"], {}).get(model, {})
+            model_data[model] = {
+                "answer": res.get("answer", ""),
+                "latency_seconds": res.get("latency_seconds"),
+                "tokens": res.get("eval_count"),
+                "verdict": score.get("verdict", "unscored"),
+                "hallucinated": score.get("hallucinated", False),
+                "notes": score.get("notes", ""),
+            }
+        questions.append({
+            "id": entry["id"],
+            "category": entry["category"],
+            "category_label": CATEGORY_LABELS.get(entry["category"], entry["category"]),
+            "question": entry["question"],
+            "retrieved_from": entry.get("retrieved_from", []),
+            "models": model_data,
+        })
+
+    return {
+        "available": True,
+        "models": models,
+        "metric_definitions": metric_definitions,
+        "questions": questions,
     }
 
 @app.get("/health")
