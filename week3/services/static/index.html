@@ -217,6 +217,23 @@
   .model-notes { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-style: italic; }
 
   .stat-table td.num, .stat-table th.num { text-align: right; }
+
+  .conclusion-card {
+    background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.03));
+    border: 1px solid rgba(99,102,241,0.35);
+    border-radius: 14px;
+    padding: 22px 26px;
+    margin-bottom: 24px;
+  }
+  .conclusion-card h3 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
+  .conclusion-card .summary-text { font-size: 13.5px; line-height: 1.6; color: #d4d8e6; margin-bottom: 18px; }
+  .winner-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+  .winner-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid var(--panel-border); }
+  .winner-table td { padding: 10px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+  .winner-model { font-family: Consolas, monospace; font-weight: 700; color: var(--good); font-size: 12.5px; }
+  .winner-reason { color: var(--muted); font-size: 12px; }
+  .recommendation-box { background: var(--code-bg); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: #d4d8e6; }
+  .recommendation-box b { color: var(--accent); }
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
@@ -291,7 +308,9 @@
   </div>
 
   <div class="tab-panel" id="tabMetrics">
-    <div class="kb-summary" id="metricsSummary">Loading Week 4 evaluation metrics...</div>
+    <div class="kb-summary" id="metricsSummary">Loading evaluation metrics...</div>
+
+    <div id="conclusionBox" style="display:none;"></div>
 
     <details class="definitions" id="definitionsPanel" style="display:none;">
       <summary>How each metric is calculated</summary>
@@ -393,10 +412,35 @@ async function loadMetrics() {
     metricsLoaded = true;
     summary.textContent = `Week 4 evaluation: ${data.total_questions} questions x ${data.models.length} models, compared category-by-category (not just overall).`;
 
-    // Metric definitions panel
+    // Conclusion, metric definitions, and per-question breakdown
     try {
       const evalRes = await fetch('/evaluation');
       const evalData = await evalRes.json();
+
+      if (evalData.available && evalData.conclusion && evalData.conclusion.summary) {
+        const c = evalData.conclusion;
+        const winnerRows = (c.category_winners || []).map(w => `
+          <tr>
+            <td>${escapeHtml(w.category)}</td>
+            <td class="winner-model">${w.winner === 'tie' ? 'Tie' : escapeHtml(w.winner)}</td>
+            <td class="winner-reason">${escapeHtml(w.reason)}</td>
+          </tr>
+        `).join('');
+
+        document.getElementById('conclusionBox').innerHTML = `
+          <div class="conclusion-card">
+            <h3>Conclusion &mdash; Which Model Performs Best?</h3>
+            <div class="summary-text">${escapeHtml(c.summary)}</div>
+            <table class="winner-table">
+              <tr><th>Category</th><th>Best Model</th><th>Why</th></tr>
+              ${winnerRows}
+            </table>
+            <div class="recommendation-box"><b>Recommendation:</b> ${escapeHtml(c.overall_recommendation || '')}</div>
+          </div>
+        `;
+        document.getElementById('conclusionBox').style.display = 'block';
+      }
+
       if (evalData.available && evalData.metric_definitions) {
         const defs = evalData.metric_definitions;
         document.getElementById('definitionsList').innerHTML = Object.entries(defs).map(([k, v]) =>
@@ -405,7 +449,7 @@ async function loadMetrics() {
         document.getElementById('definitionsPanel').style.display = 'block';
       }
       renderQuestions(evalData);
-    } catch (e) { /* metric definitions / questions are best-effort */ }
+    } catch (e) { /* conclusion / definitions / questions are best-effort */ }
 
     const overallRows = data.models.map(m => statRow(m, data.overall[m])).join('');
 

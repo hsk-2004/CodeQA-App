@@ -1,4 +1,17 @@
 {
+  "conclusion": {
+    "summary": "No single model wins every task. codellama:7b and phi3:mini both produced correct, grounded answers across all 12 questions with different strengths per category; starcoder2:3b (as pulled from Ollama's default tag) failed to genuinely answer any of the 12 questions in any category -- it repeatedly generated new fake questions instead of responding, indicating it is a base/completion-style model rather than instruction-tuned like the other two. Raw speed is therefore not a valid quality signal on its own: starcoder2:3b was the fastest model (18.7s avg) but delivered zero usable answers.",
+    "category_winners": [
+      {"category": "Explanation", "winner": "codellama:7b", "reason": "More consistent answer length/detail across both explanation questions; phi3:mini was excellent on the short question but became very verbose on the longer one without adding proportional value."},
+      {"category": "Code Retrieval", "winner": "phi3:mini", "reason": "Gave a direct, minimal, fully correct answer ('File: auth.py'); codellama:7b was technically correct but phrased it confusingly."},
+      {"category": "Dependency Understanding", "winner": "codellama:7b", "reason": "Stayed on-topic throughout; phi3:mini's answer drifted into unrelated generated text at the end (mild hallucination/prompt-leakage)."},
+      {"category": "Bug Analysis", "winner": "phi3:mini", "reason": "codellama:7b gave an internally contradictory answer on one question; phi3:mini's reasoning was clearer and consistent on both."},
+      {"category": "Code Generation", "winner": "phi3:mini", "reason": "codellama:7b's generated unit test contained a subtle bug (comparing a real hash to a literal placeholder string, which would fail if run); phi3:mini's generated test looked structurally correct."},
+      {"category": "Refactoring", "winner": "tie", "reason": "Both suggested valid, comparable improvements (stronger hashing algorithms, salting) with no meaningful quality difference."},
+      {"category": "RAG-based Question", "winner": "codellama:7b", "reason": "More concise and precise, e.g. explicitly naming both required conditions for a successful payment."}
+    ],
+    "overall_recommendation": "For this application, phi3:mini offers the best practical trade-off: essentially the same real-world answer quality as codellama:7b, at meaningfully lower average latency (40.5s vs 50.1s) on this CPU-only VM. codellama:7b remains a strong alternative where slightly higher precision matters (Explanation, Dependency Understanding, RAG-based questions). starcoder2:3b, in its default Ollama configuration, is not usable for this application at all -- it would need a different (instruction-tuned) tag or model to be considered."
+  },
   "metric_definitions": {
     "correctness": "Manually judged by comparing the model's answer against the actual sample_codebase source files. Scored as: correct (fully matches the real code/logic), partial (mostly right but has an imprecision, hedge, or a subtly wrong detail), or incorrect/no_answer (wrong, contradictory, or did not actually respond to the question).",
     "hallucination": "Flagged true if the answer states something not present in / contradicted by the actual codebase (e.g. inventing a file, function, or fact that doesn't exist), or if the model ignored the question and generated unrelated text instead.",

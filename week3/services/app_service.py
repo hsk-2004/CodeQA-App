@@ -238,11 +238,13 @@ def evaluation():
 
     scores_by_qid = {}
     metric_definitions = {}
+    conclusion = {}
     if os.path.exists(EVAL_SCORES_FILE):
         with open(EVAL_SCORES_FILE) as f:
             scores_data = json.load(f)
             scores_by_qid = {q["id"]: q["scores"] for q in scores_data["questions"]}
             metric_definitions = scores_data.get("metric_definitions", {})
+            conclusion = scores_data.get("conclusion", {})
 
     models = sorted({m for entry in results for m in entry["models"]})
 
@@ -273,6 +275,7 @@ def evaluation():
         "available": True,
         "models": models,
         "metric_definitions": metric_definitions,
+        "conclusion": conclusion,
         "questions": questions,
     }
 
