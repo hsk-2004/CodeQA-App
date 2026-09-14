@@ -6,16 +6,20 @@
 <title>CodeQA - RAG vs No-RAG Comparison</title>
 <style>
   :root {
-    --bg: #0f1117;
-    --panel: #171a23;
-    --panel-border: #262b38;
-    --text: #e6e8ef;
-    --muted: #8b91a5;
-    --accent: #6366f1;
-    --accent-hover: #4f46e5;
-    --good: #22c55e;
+    --bg: #fdf4ff;
+    --panel: #ffffff;
+    --panel-border: #f0defc;
+    --text: #241b36;
+    --muted: #8577a3;
+    --accent: #a855f7;
+    --accent2: #ec4899;
+    --accent3: #f97316;
+    --accent4: #06b6d4;
+    --accent-hover: #9333ea;
+    --good: #16a34a;
     --bad: #ef4444;
-    --code-bg: #0b0d12;
+    --code-bg: #faf5ff;
+    --code-text: #3b2f57;
   }
   * { box-sizing: border-box; }
   body {
@@ -25,17 +29,24 @@
     color: var(--text);
   }
   header {
-    padding: 28px 40px 20px;
-    border-bottom: 1px solid var(--panel-border);
-    background: linear-gradient(180deg, #171a23 0%, #0f1117 100%);
+    padding: 30px 40px 22px;
+    border-bottom: 3px solid transparent;
+    border-image: linear-gradient(90deg, var(--accent), var(--accent2), var(--accent3), var(--accent4)) 1;
+    background: linear-gradient(120deg, #f3e8ff 0%, #fce7f3 45%, #ffedd5 100%);
   }
   header h1 {
     margin: 0 0 4px;
-    font-size: 22px;
+    font-size: 24px;
     letter-spacing: -0.3px;
+    font-weight: 800;
   }
-  header h1 span { color: var(--accent); }
-  header p { margin: 0; color: var(--muted); font-size: 13.5px; }
+  header h1 span {
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p { margin: 0; color: #6b5b8a; font-size: 13.5px; }
 
   .container { max-width: 1200px; margin: 0 auto; padding: 28px 40px 60px; }
 
@@ -57,17 +68,18 @@
   #question:focus { border-color: var(--accent); }
   button {
     padding: 14px 26px;
-    background: var(--accent);
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
     color: white;
     border: none;
     border-radius: 10px;
     font-size: 14.5px;
-    font-weight: 600;
+    font-weight: 700;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: transform 0.1s, box-shadow 0.15s;
+    box-shadow: 0 4px 14px rgba(168,85,247,0.3);
   }
-  button:hover { background: var(--accent-hover); }
-  button:disabled { background: #3a3d4a; cursor: not-allowed; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(168,85,247,0.4); }
+  button:disabled { background: #d8cce8; box-shadow: none; cursor: not-allowed; transform: none; }
 
   .suggestions {
     display: flex;
@@ -84,7 +96,49 @@
     color: var(--muted);
     cursor: pointer;
   }
-  .chip:hover { border-color: var(--accent); color: var(--text); }
+  .chip:hover { border-color: var(--accent); color: var(--accent-hover); background: #faf5ff; }
+
+  .controls-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 16px;
+  }
+  .mode-toggle { display: flex; gap: 4px; background: #f3e8ff; padding: 4px; border-radius: 12px; }
+  .mode-toggle button {
+    background: none; box-shadow: none; color: var(--muted); padding: 9px 16px; font-size: 13px;
+  }
+  .mode-toggle button.active { background: var(--panel); color: var(--accent-hover); box-shadow: 0 2px 6px rgba(168,85,247,0.2); }
+  .mode-toggle button:hover:not(.active) { transform: none; box-shadow: none; color: var(--text); }
+
+  select#modelSelect {
+    padding: 11px 14px;
+    border-radius: 10px;
+    border: 1px solid var(--panel-border);
+    background: var(--panel);
+    color: var(--text);
+    font-size: 13.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .rag-toggle {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--panel); border: 1px solid var(--panel-border);
+    padding: 8px 14px; border-radius: 20px; cursor: pointer; user-select: none;
+    font-size: 13px; font-weight: 600; color: var(--muted);
+  }
+  .rag-toggle .switch {
+    width: 38px; height: 20px; border-radius: 20px; background: #e4d4f4; position: relative; transition: background 0.15s;
+  }
+  .rag-toggle .switch::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%;
+    background: white; transition: left 0.15s; box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+  }
+  .rag-toggle.on .switch { background: linear-gradient(90deg, var(--accent), var(--accent2)); }
+  .rag-toggle.on .switch::after { left: 20px; }
+  .rag-toggle.on { color: var(--accent-hover); }
 
   .status { color: var(--muted); font-size: 13px; margin: 6px 0 18px; min-height: 18px; }
 
@@ -100,6 +154,7 @@
     border: 1px solid var(--panel-border);
     border-radius: 12px;
     padding: 20px;
+    box-shadow: 0 4px 20px rgba(168,85,247,0.08);
   }
   .panel-header {
     display: flex;
@@ -150,7 +205,7 @@
     border-radius: 8px 8px 0 0; cursor: pointer;
   }
   .tab-btn:hover { color: var(--text); }
-  .tab-btn.active { color: var(--text); background: var(--panel); border: 1px solid var(--panel-border); border-bottom: 1px solid var(--panel); }
+  .tab-btn.active { color: var(--accent-hover); background: var(--bg); border: 1px solid var(--panel-border); border-bottom: 3px solid var(--bg); margin-bottom: -1px; }
   .tab-panel { display: none; }
   .tab-panel.active { display: block; }
 
@@ -172,7 +227,7 @@
     font-family: Consolas, monospace;
     font-size: 12.5px;
     white-space: pre-wrap;
-    color: #d4d8e6;
+    color: var(--code-text);
     overflow-x: auto;
   }
   .kb-summary { color: var(--muted); font-size: 13px; margin-bottom: 18px; }
@@ -211,7 +266,7 @@
   .model-name { font-family: Consolas, monospace; font-size: 12.5px; color: var(--accent); font-weight: 700; }
   .model-stats { font-size: 11px; color: var(--muted); margin-top: 4px; }
   .model-answer {
-    font-size: 12.5px; color: #d4d8e6; background: var(--code-bg); border: 1px solid var(--panel-border);
+    font-size: 12.5px; color: var(--code-text); background: var(--code-bg); border: 1px solid var(--panel-border);
     border-radius: 6px; padding: 8px 10px; white-space: pre-wrap; max-height: 140px; overflow-y: auto;
   }
   .model-notes { font-size: 11.5px; color: var(--muted); margin-top: 6px; font-style: italic; }
@@ -219,21 +274,22 @@
   .stat-table td.num, .stat-table th.num { text-align: right; }
 
   .conclusion-card {
-    background: linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.03));
-    border: 1px solid rgba(99,102,241,0.35);
+    background: linear-gradient(135deg, #f3e8ff, #fce7f3);
+    border: 1px solid #e4b8fb;
     border-radius: 14px;
     padding: 22px 26px;
     margin-bottom: 24px;
+    box-shadow: 0 6px 24px rgba(168,85,247,0.15);
   }
-  .conclusion-card h3 { margin: 0 0 10px; font-size: 16px; color: var(--text); }
-  .conclusion-card .summary-text { font-size: 13.5px; line-height: 1.6; color: #d4d8e6; margin-bottom: 18px; }
+  .conclusion-card h3 { margin: 0 0 10px; font-size: 17px; color: var(--accent-hover); }
+  .conclusion-card .summary-text { font-size: 13.5px; line-height: 1.6; color: var(--code-text); margin-bottom: 18px; }
   .winner-table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
-  .winner-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid var(--panel-border); }
-  .winner-table td { padding: 10px; font-size: 13px; border-bottom: 1px solid rgba(255,255,255,0.04); vertical-align: top; }
+  .winner-table th { text-align: left; padding: 8px 10px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; color: var(--muted); border-bottom: 1px solid #e4b8fb; }
+  .winner-table td { padding: 10px; font-size: 13px; border-bottom: 1px solid rgba(168,85,247,0.12); vertical-align: top; }
   .winner-model { font-family: Consolas, monospace; font-weight: 700; color: var(--good); font-size: 12.5px; }
   .winner-reason { color: var(--muted); font-size: 12px; }
-  .recommendation-box { background: var(--code-bg); border-left: 3px solid var(--accent); border-radius: 6px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: #d4d8e6; }
-  .recommendation-box b { color: var(--accent); }
+  .recommendation-box { background: white; border-left: 4px solid var(--accent2); border-radius: 6px; padding: 14px 16px; font-size: 13px; line-height: 1.6; color: var(--code-text); }
+  .recommendation-box b { color: var(--accent2); }
   .spinner {
     display: inline-block;
     width: 14px; height: 14px;
@@ -264,6 +320,19 @@
   </div>
 
   <div class="tab-panel active" id="tabCompare">
+
+    <div class="controls-row">
+      <div class="mode-toggle">
+        <button id="modeBtnCompare" class="active" onclick="setQueryMode('compare')">Compare Both</button>
+        <button id="modeBtnCustom" onclick="setQueryMode('custom')">Custom Query</button>
+      </div>
+      <select id="modelSelect" style="display:none;"></select>
+      <div class="rag-toggle on" id="ragToggle" onclick="toggleRag()" style="display:none;">
+        <span class="switch"></span>
+        <span id="ragToggleLabel">RAG: ON</span>
+      </div>
+    </div>
+
     <div class="ask-box">
       <input id="question" type="text" placeholder="e.g. Which file handles user authentication?" />
       <button id="askBtn" onclick="ask()">Compare</button>
@@ -279,7 +348,7 @@
 
     <div class="status" id="status"></div>
 
-    <div class="columns">
+    <div class="columns" id="compareColumns">
       <div class="panel">
         <div class="panel-header">
           <span class="badge no-rag">WITHOUT RAG</span>
@@ -298,6 +367,18 @@
           <div class="retrieved-title">Retrieved from</div>
           <div id="retrievedFiles"></div>
         </div>
+      </div>
+    </div>
+
+    <div class="panel" id="customAnswerPanel" style="display:none;">
+      <div class="panel-header">
+        <span class="badge" id="customBadge">ANSWER</span>
+        <span class="latency" id="latencyCustom"></span>
+      </div>
+      <div id="answerCustom" class="placeholder">Pick a model, toggle RAG on/off, and ask a question.</div>
+      <div id="retrievedBoxCustom" class="retrieved" style="display:none;">
+        <div class="retrieved-title">Retrieved from</div>
+        <div id="retrievedFilesCustom"></div>
       </div>
     </div>
   </div>
@@ -573,9 +654,51 @@ async function loadHistory() {
   }
 }
 
+let queryMode = 'compare'; // 'compare' | 'custom'
+let ragOn = true;
+let modelsLoaded = false;
+
+function setQueryMode(mode) {
+  queryMode = mode;
+  document.getElementById('modeBtnCompare').classList.toggle('active', mode === 'compare');
+  document.getElementById('modeBtnCustom').classList.toggle('active', mode === 'custom');
+
+  const isCustom = mode === 'custom';
+  document.getElementById('modelSelect').style.display = isCustom ? 'inline-block' : 'none';
+  document.getElementById('ragToggle').style.display = isCustom ? 'flex' : 'none';
+  document.getElementById('compareColumns').style.display = isCustom ? 'none' : 'grid';
+  document.getElementById('customAnswerPanel').style.display = isCustom ? 'block' : 'none';
+  document.getElementById('askBtn').textContent = isCustom ? 'Ask' : 'Compare';
+
+  if (isCustom && !modelsLoaded) loadModelList();
+}
+
+async function loadModelList() {
+  const select = document.getElementById('modelSelect');
+  try {
+    const res = await fetch('/models');
+    const data = await res.json();
+    modelsLoaded = true;
+    select.innerHTML = data.models.map(m =>
+      `<option value="${escapeHtml(m)}" ${m === data.default ? 'selected' : ''}>${escapeHtml(m)}</option>`
+    ).join('');
+  } catch (err) {
+    select.innerHTML = '<option>Error loading models</option>';
+  }
+}
+
+function toggleRag() {
+  ragOn = !ragOn;
+  const el = document.getElementById('ragToggle');
+  el.classList.toggle('on', ragOn);
+  document.getElementById('ragToggleLabel').textContent = ragOn ? 'RAG: ON' : 'RAG: OFF';
+}
+
 async function ask() {
   const question = document.getElementById('question').value.trim();
   if (!question) return;
+
+  if (queryMode === 'custom') return askCustom(question);
 
   const btn = document.getElementById('askBtn');
   const status = document.getElementById('status');
@@ -608,6 +731,44 @@ async function ask() {
     document.getElementById('retrievedBox').style.display = 'block';
 
     status.textContent = 'Done. Model: ' + data.model;
+  } catch (err) {
+    status.textContent = 'Error: ' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function askCustom(question) {
+  const btn = document.getElementById('askBtn');
+  const status = document.getElementById('status');
+  const model = document.getElementById('modelSelect').value;
+
+  btn.disabled = true;
+  status.innerHTML = '<span class="spinner"></span>Thinking... this can take 20-90 seconds on CPU-only inference.';
+  document.getElementById('answerCustom').innerHTML = '<span class="placeholder">Generating...</span>';
+  document.getElementById('latencyCustom').textContent = '';
+  document.getElementById('retrievedBoxCustom').style.display = 'none';
+  document.getElementById('customBadge').className = ragOn ? 'badge rag' : 'badge no-rag';
+  document.getElementById('customBadge').textContent = ragOn ? 'WITH RAG' : 'WITHOUT RAG';
+
+  try {
+    const res = await fetch('/query', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, model, use_rag: ragOn })
+    });
+    if (!res.ok) throw new Error('Request failed: ' + res.status);
+    const data = await res.json();
+
+    document.getElementById('answerCustom').textContent = data.answer.trim();
+    document.getElementById('latencyCustom').textContent = data.latency_seconds + 's' + (data.tokens ? ` · ${data.tokens} tokens` : '');
+
+    if (data.use_rag && data.retrieved_from.length) {
+      document.getElementById('retrievedFilesCustom').innerHTML = data.retrieved_from.map(f => `<span class="file-tag">${escapeHtml(f)}</span>`).join('');
+      document.getElementById('retrievedBoxCustom').style.display = 'block';
+    }
+
+    status.textContent = `Done. Model: ${data.model} · RAG: ${data.use_rag ? 'on' : 'off'}`;
   } catch (err) {
     status.textContent = 'Error: ' + err.message;
   } finally {

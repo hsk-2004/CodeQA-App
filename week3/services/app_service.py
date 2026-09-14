@@ -11,6 +11,7 @@ import requests
 RETRIEVAL_SERVICE_URL = os.environ.get("RETRIEVAL_SERVICE_URL", "http://localhost:8001/retrieve")
 RETRIEVAL_SERVICE_BASE = RETRIEVAL_SERVICE_URL.rsplit("/", 1)[0]
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://localhost:11434/api/generate")
+OLLAMA_BASE = OLLAMA_URL.rsplit("/api/", 1)[0]
 LLM_MODEL = os.environ.get("LLM_MODEL", "codellama:7b")
 
 EVAL_DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "eval_data")
@@ -37,6 +38,11 @@ live_history: list[dict] = []
 class AskRequest(BaseModel):
     question: str
 
+class QueryRequest(BaseModel):
+    question: str
+    model: str | None = None
+    use_rag: bool = True
+
 def call_retrieval_service(question: str) -> list[dict]:
     response = requests.post(RETRIEVAL_SERVICE_URL, json={"question": question})
     response.raise_for_status()
@@ -54,16 +60,20 @@ Context:
 Question: {question}
 Answer:"""
 
-def call_llm(prompt: str) -> dict:
+def call_llm(prompt: str, model: str = LLM_MODEL) -> dict:
     start = time.time()
     response = requests.post(
         OLLAMA_URL,
-        json={"model": LLM_MODEL, "prompt": prompt, "stream": False}
+        json={"model": model, "prompt": prompt, "stream": False}
     )
     elapsed = round(time.time() - start, 2)
     response.raise_for_status()
     data = response.json()
-    return {"answer": data.get("response", ""), "latency_seconds": elapsed}
+    return {
+        "answer": data.get("response", ""),
+        "latency_seconds": elapsed,
+        "tokens": data.get("eval_count"),
+    }
 
 @app.post("/ask")
 def ask(req: AskRequest):
@@ -108,6 +118,44 @@ def compare(req: AskRequest):
     })
 
     return result
+
+@app.get("/models")
+def list_models():
+    """Lists models actually pulled/available in Ollama, so the frontend can
+    offer a real model picker instead of a hardcoded list."""
+    try:
+        response = requests.get(f"{OLLAMA_BASE}/api/tags", timeout=10)
+        response.raise_for_status()
+        tags = response.json().get("models", [])
+        names = [m["name"] for m in tags if "embed" not in m["name"]]
+        return {"models": sorted(names), "default": LLM_MODEL}
+    except requests.exceptions.RequestException as e:
+        return {"models": [LLM_MODEL], "default": LLM_MODEL, "error": str(e)}
+
+@app.post("/query")
+def query(req: QueryRequest):
+    """Single-answer query: pick any pulled model, and toggle RAG on/off,
+    instead of always running the fixed with/without-RAG comparison."""
+    model = req.model or LLM_MODEL
+
+    if req.use_rag:
+        chunks = call_retrieval_service(req.question)
+        prompt = build_prompt_with_context(req.question, chunks)
+        result = call_llm(prompt, model=model)
+        result["retrieved_from"] = [c["file"] for c in chunks]
+    else:
+        result = call_llm(req.question, model=model)
+        result["retrieved_from"] = []
+
+    return {
+        "question": req.question,
+        "model": model,
+        "use_rag": req.use_rag,
+        "answer": result["answer"],
+        "latency_seconds": result["latency_seconds"],
+        "tokens": result.get("tokens"),
+        "retrieved_from": result["retrieved_from"],
+    }
 
 @app.get("/knowledge-base")
 def knowledge_base():
