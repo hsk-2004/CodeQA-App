@@ -6,6 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY services/app_service.py services/app_service.py
+COPY services/guardrails.py services/guardrails.py
 COPY services/__init__.py services/__init__.py
 COPY services/static services/static
 COPY eval_data eval_data

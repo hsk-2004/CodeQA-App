@@ -468,6 +468,38 @@ had not completed at the time this report was generated. Re-run <code>build_repo
         with open(ex5_path, encoding="utf-8") as f:
             exercise5_md = f.read()
 
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "week3"))
+    from services.guardrails import GUARDRAIL_CATALOG
+    guard_rows = "".join(
+        f"<tr><td><b>{esc(g['name'])}</b></td><td><span class='tag'>{esc(g['stage'])}</span></td><td>{esc(g['description'])}</td></tr>"
+        for g in GUARDRAIL_CATALOG
+    )
+    guardrails_html = f"""
+<h2>Guardrails Applied to the Application</h2>
+<p>To make the Week 3 application safer and more reliable before exposing it through the web UI,
+{len(GUARDRAIL_CATALOG)} guardrails were added in <code>week3/services/guardrails.py</code> and enforced by the
+App/Orchestration Service on every request. They act at four stages: before the model is called
+(<b>Input</b>), between retrieval and generation (<b>Retrieval</b>), after the model answers
+(<b>Output</b>), and around every request (<b>Resource</b>). The UI shows which guardrails are active and,
+for each answer, whether it passed, was blocked, or was flagged.</p>
+<table><tr><th>Guardrail</th><th>Stage</th><th>What it does</th></tr>{guard_rows}</table>
+<div class="box"><p><b>Link to the evaluation findings:</b> the file-reference hallucination check
+directly targets the failure seen in Exercise 5, where the model without RAG invented a non-existent
+<code>auth.php</code>; the relevance threshold stops the model from guessing when retrieval finds nothing
+relevant (the "important information was missed" case); and the output token cap addresses the very long,
+slow generations observed for some models in Exercise 3.</p></div>
+"""
+
+    limitations_html = ""
+    scores_path = os.path.join(ROOT, "week4", "manual_scores.json")
+    if os.path.exists(scores_path):
+        with open(scores_path, encoding="utf-8") as f:
+            limitations = json.load(f).get("conclusion", {}).get("limitations", [])
+        if limitations:
+            limitations_html = "<h2>Limitations of this Evaluation</h2><div class='warn'><ul>" + "".join(
+                f"<li>{esc(l)}</li>" for l in limitations) + "</ul></div>"
+
     body = f"""
 <h2>Objective</h2>
 <p>Move from building an LLM application to systematically evaluating multiple models, performing
@@ -589,6 +621,10 @@ dissimilar to the question's wording but structurally connected (e.g. a file thr
 This is precisely the gap that dedicated repository-understanding tools like Sourcegraph (covered in the
 following week) are designed to close, by indexing actual code structure rather than relying solely on
 text similarity.</p>
+
+{guardrails_html}
+
+{limitations_html}
 
 <h2>Conclusion</h2>
 <p>Week 4 confirmed that model choice measurably affects both speed and answer quality on the same

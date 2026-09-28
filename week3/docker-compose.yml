@@ -16,9 +16,15 @@ services:
       dockerfile: services/Dockerfile.app
     ports:
       - "8000:8000"
+    volumes:
+      # Evaluation data, guardrail test results and live question history are
+      # read from / saved to the host folder, so they persist across restarts.
+      - ./eval_data:/app/eval_data
     environment:
       - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001/retrieve
       - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+      - RELEVANCE_THRESHOLD=0.40
+      - LLM_MODEL=${LLM_MODEL:-codellama:7b}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:

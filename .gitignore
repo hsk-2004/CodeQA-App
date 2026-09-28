@@ -1,3 +1,4 @@
 venv/
 __pycache__/
 *.pyc
+week3/eval_data/live_history.json

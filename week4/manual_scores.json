@@ -10,6 +10,12 @@
       {"category": "Refactoring", "winner": "tie", "reason": "Both suggested valid, comparable improvements (stronger hashing algorithms, salting) with no meaningful quality difference."},
       {"category": "RAG-based Question", "winner": "codellama:7b", "reason": "More concise and precise, e.g. explicitly naming both required conditions for a successful payment."}
     ],
+    "limitations": [
+      "Dataset size: 12 questions (covering all 7 required categories plus repository understanding) instead of the suggested 20-30. On this CPU-only VM each answer took roughly 15-120 seconds, so 20-30 questions x 3 models would have meant 60-90 model calls and several hours of runtime; 12 questions (36 calls) kept the run feasible while still giving every category at least one question. Categories with a single question (Code Retrieval, Dependency Understanding, Code Generation, Refactoring) should therefore be read as indicative rather than statistically conclusive.",
+      "CPU/memory consumption was observed at the VM level (all models are served by one shared Ollama process) rather than measured separately per model and per question.",
+      "Code test-pass rate was judged by inspecting the generated tests against the real functions, not by executing them.",
+      "Correctness and hallucination verdicts are manual judgments by the group, made by comparing each answer to the actual source files."
+    ],
     "overall_recommendation": "For this application, phi3:mini offers the best practical trade-off: essentially the same real-world answer quality as codellama:7b, at meaningfully lower average latency (40.5s vs 50.1s) on this CPU-only VM. codellama:7b remains a strong alternative where slightly higher precision matters (Explanation, Dependency Understanding, RAG-based questions). starcoder2:3b, in its default Ollama configuration, is not usable for this application at all -- it would need a different (instruction-tuned) tag or model to be considered."
   },
   "metric_definitions": {
