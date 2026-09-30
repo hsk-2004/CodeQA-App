@@ -6,7 +6,7 @@ services:
     ports:
       - "8001:8001"
     environment:
-      - OLLAMA_EMBED_URL=http://host.docker.internal:11434/api/embeddings
+      - OLLAMA_EMBED_URL=${OLLAMA_HOST_URL:-http://host.docker.internal:11434}/api/embeddings
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
@@ -22,7 +22,7 @@ services:
       - ./eval_data:/app/eval_data
     environment:
       - RETRIEVAL_SERVICE_URL=http://retrieval-service:8001/retrieve
-      - OLLAMA_URL=http://host.docker.internal:11434/api/generate
+      - OLLAMA_URL=${OLLAMA_HOST_URL:-http://host.docker.internal:11434}/api/generate
       - RELEVANCE_THRESHOLD=0.40
       - LLM_MODEL=${LLM_MODEL:-codellama:7b}
     extra_hosts:

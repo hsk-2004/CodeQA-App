@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import time
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -96,11 +97,42 @@ def call_llm(prompt: str, model: str = LLM_MODEL) -> dict:
     elapsed = round(time.time() - start, 2)
     response.raise_for_status()
     data = response.json()
+    eval_count = data.get("eval_count") or 0
+    eval_seconds = (data.get("eval_duration") or 0) / 1e9
     return {
         "answer": data.get("response", ""),
         "latency_seconds": elapsed,
         "tokens": data.get("eval_count"),
+        "prompt_tokens": data.get("prompt_eval_count"),
+        "tokens_per_second": round(eval_count / eval_seconds, 2) if eval_seconds else None,
+        "load_seconds": round((data.get("load_duration") or 0) / 1e9, 2),
     }
+
+def model_memory_mb(model: str) -> float | None:
+    """Memory the model occupies while loaded, from Ollama's /api/ps."""
+    try:
+        response = requests.get(f"{OLLAMA_BASE}/api/ps", timeout=10)
+        response.raise_for_status()
+        for m in response.json().get("models", []):
+            if m.get("name") == model or m.get("model") == model:
+                return round(m.get("size", 0) / (1024 * 1024), 1)
+    except requests.exceptions.RequestException:
+        pass
+    return None
+
+def context_coverage(answer: str, chunks: list[dict]) -> dict:
+    """Share of the retrieved context's key identifiers (file and function names)
+    that the answer actually mentions -- a live, automatic groundedness proxy."""
+    identifiers = set()
+    for c in chunks:
+        identifiers.add(c["file"].lower())
+        identifiers.update(n.lower() for n in re.findall(r"def\s+(\w+)", c["text"]))
+    if not identifiers:
+        return {"percent": None, "matched": [], "total": 0}
+    text = answer.lower()
+    matched = sorted(i for i in identifiers if i in text or i.replace(".py", "") in text)
+    return {"percent": round(100 * len(matched) / len(identifiers), 1),
+            "matched": matched, "total": len(identifiers)}
 
 def available_models() -> list[str]:
     try:
@@ -164,6 +196,70 @@ def answer_without_rag(question: str, model: str) -> dict:
     result = call_llm(question, model=model)
     answer, warnings = guardrails.check_output(result["answer"], grounded=False)
     return {**result, "answer": answer, "warnings": warnings}
+
+class ModelComparisonRecord(BaseModel):
+    question: str
+    runs: list[dict]
+
+@app.post("/history/models")
+def save_model_comparison(req: ModelComparisonRecord):
+    """Saves a finished live Compare Models run (answers + all measured metrics) to history."""
+    runs = [{"model": r.get("model"), "answer": r.get("answer", ""), "metrics": {
+        **{k: v for k, v in (r.get("metrics") or {}).items() if k != "context_coverage"},
+        "coverage": ((r.get("metrics") or {}).get("context_coverage") or {}).get("percent"),
+        "hallucinated": 1 if (r.get("metrics") or {}).get("hallucinated") else 0,
+    }} for r in req.runs]
+    record_history({"mode": "models", "question": req.question,
+                    "source": "Live Compare Models run: every parameter measured in this run.", "runs": runs})
+    return {"saved": True}
+
+class ModelRunRequest(BaseModel):
+    question: str
+    model: str
+
+@app.post("/model-run")
+def model_run(req: ModelRunRequest, request: Request):
+    """Runs ONE model on the question (with RAG) and returns every live metric.
+    The frontend calls this once per model to build the multi-model comparison."""
+    enforce_rate_limit(request)
+    input_check = guardrails.check_input(req.question)
+    base = {"question": req.question, "model": req.model}
+
+    if not input_check["allowed"]:
+        return {**base, "blocked": True, "answer": blocked_message(input_check["reason"]),
+                "guardrails": guardrail_report(input_check, triggered=input_check["guardrail"],
+                                               reason=input_check["reason"])}
+    if req.model not in available_models():
+        reason = f"Model '{req.model}' is not installed in Ollama."
+        return {**base, "blocked": True, "answer": blocked_message(reason),
+                "guardrails": guardrail_report(input_check, triggered="model_allowlist", reason=reason)}
+
+    rag = answer_with_rag(input_check["question"], req.model)
+    report = guardrail_report(
+        input_check, relevance=rag["relevance"], output_warnings=rag["warnings"],
+        triggered="relevance_threshold" if rag["declined"] else None,
+        reason=rag["answer"] if rag["declined"] else None)
+    hallucinated = any("hallucination" in w.lower() for w in rag["warnings"])
+
+    return {
+        **base,
+        "blocked": rag["declined"],
+        "answer": rag["answer"],
+        "retrieved_from": rag["retrieved_from"],
+        "metrics": {
+            "latency_seconds": rag["latency_seconds"],
+            "tokens": rag.get("tokens"),
+            "prompt_tokens": rag.get("prompt_tokens"),
+            "tokens_per_second": rag.get("tokens_per_second"),
+            "load_seconds": rag.get("load_seconds"),
+            "memory_mb": None if rag["declined"] else model_memory_mb(req.model),
+            "relevance": rag["relevance"]["top_score"],
+            "context_coverage": context_coverage(rag["answer"], rag["retrieved_chunks"]),
+            "hallucinated": hallucinated,
+            "answer_chars": len(rag["answer"]),
+        },
+        "guardrails": report,
+    }
 
 @app.get("/guardrails")
 def list_guardrails():
@@ -316,6 +412,8 @@ def knowledge_base():
 @app.get("/history")
 def history():
     """Every question asked through the UI (Compare and Custom Query), saved to HISTORY_FILE."""
+    global live_history
+    live_history = _load_history()
     return {"total": len(live_history), "entries": live_history}
 
 @app.get("/metrics")

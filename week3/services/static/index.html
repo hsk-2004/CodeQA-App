@@ -277,6 +277,34 @@
   .inline-warn { margin-top: 10px; font-size: 12px; color: #b45309; background: #fffbeb; border: 1px solid #fde68a; border-radius: 9px; padding: 8px 11px; line-height: 1.5; }
   .meta { color: var(--muted); }
 
+  /* ---------- Live model comparison ---------- */
+  .mc-note { font-size: 13px; color: var(--code-text); background: #f5f0ff; border: 1px solid #e4d8fd; border-radius: 12px; padding: 11px 15px; margin-bottom: 16px; }
+  .mc-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .mc-answer .answer { max-height: 260px; overflow-y: auto; font-size: 13px; }
+  .mc-model { font-family: var(--mono); font-weight: 600; font-size: 13px; }
+  .mc-charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 14px; }
+  .mc-chart { background: var(--panel); border: 1px solid var(--panel-border); border-radius: var(--radius); padding: 16px 18px; box-shadow: var(--shadow-sm); }
+  .mc-chart-title { font-weight: 700; font-size: 14px; display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+  .mc-chart-title span { font-size: 10.5px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+  .mc-chart-desc { font-size: 11.5px; color: var(--muted); margin: 3px 0 12px; }
+  .mc-bar-row { display: grid; grid-template-columns: 110px 1fr 108px; align-items: center; gap: 10px; margin: 9px 0; }
+  .mc-bar-label { font-family: var(--mono); font-size: 11px; color: #4b4566; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .mc-bar-track { height: 14px; background: #f3f0fa; border-radius: 7px; overflow: hidden; }
+  .mc-bar { height: 100%; border-radius: 7px; transition: width .6s cubic-bezier(.2,.8,.2,1); }
+  .mc-bar.pending { width: 30% !important; background: linear-gradient(90deg, #ebe7f5, #d8c8fb, #ebe7f5) !important; background-size: 200% 100% !important; animation: shimmer 1.2s linear infinite; }
+  @keyframes shimmer { to { background-position: -200% 0; } }
+  .mc-bar-value { font-family: var(--mono); font-size: 11.5px; font-weight: 600; text-align: right; white-space: nowrap; }
+  .mc-best { font-family: var(--font); font-size: 9.5px; font-weight: 800; color: #15803d; background: #dcfce7; padding: 1px 6px; border-radius: 999px; margin-left: 4px; text-transform: uppercase; }
+  .mc-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; vertical-align: 0; }
+  .mc-cell-best { background: #f0fdf4; color: #15803d; font-weight: 700; }
+  .mc-explain { margin-top: 12px; }
+  .mc-explain-list { list-style: none; margin: 0; padding: 0; }
+  .mc-explain-list li { padding: 9px 0; border-bottom: 1px solid #f3f0fa; font-size: 13px; line-height: 1.55; color: var(--code-text); }
+  .mc-explain-list li:last-child { border-bottom: none; }
+  .mc-explain-key { display: inline-block; min-width: 150px; font-weight: 700; color: var(--accent-hover); margin-right: 8px; }
+  #mcTable td, #mcTable th { font-family: var(--mono); font-size: 12px; }
+  #mcTable td:first-child { font-family: var(--font); }
+
   @media (max-width: 980px) {
     .sidebar { position: static; width: auto; border-right: none; border-bottom: 1px solid var(--panel-border); }
     .app { flex-direction: column; }
@@ -376,6 +404,7 @@
         <div class="mode-toggle">
           <button id="modeBtnCompare" class="active" onclick="setQueryMode('compare')">Compare Both</button>
           <button id="modeBtnCustom" onclick="setQueryMode('custom')">Custom Query</button>
+          <button id="modeBtnModels" onclick="setQueryMode('models')">Compare Models</button>
         </div>
         <select id="modelSelect" style="display:none;"></select>
         <div class="rag-toggle on" id="ragToggle" onclick="toggleRag()" style="display:none;">
@@ -437,6 +466,17 @@
         <div class="retrieved-title">Retrieved from</div>
         <div id="retrievedFilesCustom"></div>
       </div>
+    </div>
+
+    <div id="modelsPanel" style="display:none;">
+      <div class="mc-note">Each installed model answers the <b>same question</b> with the <b>same retrieved context</b>, one after another. Every parameter below is measured live from this run.</div>
+      <div class="mc-answers" id="mcAnswers"></div>
+      <div class="section-head"><h3>Parameter comparison</h3><span class="kb-summary" style="margin:0;" id="mcRunInfo"></span></div>
+      <div class="mc-charts" id="mcCharts"></div>
+      <div class="section-head"><h3>Summary table</h3></div>
+      <div class="kb-card" style="overflow-x:auto;"><table id="mcTable"></table></div>
+      <div class="kb-card mc-explain" id="mcExplain" style="display:none;"></div>
+      <div class="recommendation-box" id="mcVerdict" style="display:none;"></div>
     </div>
   </div>
 
@@ -780,7 +820,7 @@ async function loadHistory() {
           <span class="kb-chunk-id">${new Date(e.timestamp).toLocaleString()}</span>
         </div>
         ${historyGuardTag(e.guardrails)}
-        ${e.mode === 'custom' ? `
+        ${e.mode === 'models' ? historyModelsHtml(e) : e.mode === 'custom' ? `
         <div>
           <div class="panel-header">
             <span class="badge ${e.use_rag ? 'rag' : 'no-rag'}">${e.use_rag ? 'WITH RAG' : 'WITHOUT RAG'} &middot; ${escapeHtml(e.model || '')}</span>
@@ -815,15 +855,224 @@ function setQueryMode(mode) {
   queryMode = mode;
   document.getElementById('modeBtnCompare').classList.toggle('active', mode === 'compare');
   document.getElementById('modeBtnCustom').classList.toggle('active', mode === 'custom');
+  document.getElementById('modeBtnModels').classList.toggle('active', mode === 'models');
 
   const isCustom = mode === 'custom';
   document.getElementById('modelSelect').style.display = isCustom ? 'inline-block' : 'none';
   document.getElementById('ragToggle').style.display = isCustom ? 'flex' : 'none';
-  document.getElementById('compareColumns').style.display = isCustom ? 'none' : 'grid';
+  document.getElementById('compareColumns').style.display = mode === 'compare' ? 'grid' : 'none';
   document.getElementById('customAnswerPanel').style.display = isCustom ? 'block' : 'none';
-  document.getElementById('askBtn').textContent = isCustom ? 'Ask' : 'Compare';
+  document.getElementById('modelsPanel').style.display = mode === 'models' ? 'block' : 'none';
+  document.getElementById('askBtn').textContent = { compare: 'Compare', custom: 'Ask', models: 'Run all models' }[mode];
 
   if (isCustom && !modelsLoaded) loadModelList();
+}
+
+// ---------- Live multi-model comparison ----------
+const MC_COLORS = ['#7c3aed', '#db2777', '#0891b2', '#ea580c', '#16a34a'];
+const MC_METRICS = [
+  { key: 'latency_seconds', label: 'Response latency', unit: 's', better: 'lower', desc: 'Wall-clock time from request to full answer.' },
+  { key: 'tokens', label: 'Tokens generated', unit: '', better: 'info', desc: 'Output tokens (eval_count from Ollama).' },
+  { key: 'tokens_per_second', label: 'Generation speed', unit: ' tok/s', better: 'higher', desc: 'eval_count / eval_duration.' },
+  { key: 'load_seconds', label: 'Model load time', unit: 's', better: 'lower', desc: 'Time to load the model into memory (0 if already loaded).' },
+  { key: 'memory_mb', label: 'Memory used', unit: ' MB', better: 'lower', desc: 'Size of the loaded model, from Ollama /api/ps.' },
+  { key: 'coverage', label: 'Context coverage', unit: '%', better: 'higher', desc: 'Share of retrieved file/function names the answer uses (groundedness proxy).' },
+  { key: 'hallucinated', label: 'Hallucination flag', unit: '', better: 'lower', desc: '1 = answer references a file not in the codebase.' },
+];
+
+function mcValue(run, key) {
+  if (!run || !run.metrics) return null;
+  if (key === 'coverage') return run.metrics.context_coverage ? run.metrics.context_coverage.percent : null;
+  if (key === 'hallucinated') return run.metrics.hallucinated ? 1 : 0;
+  return run.metrics[key];
+}
+
+function mcBest(metric, runs) {
+  if (metric.better === 'info') return null;
+  const vals = runs.map(r => mcValue(r, metric.key)).filter(v => v !== null && v !== undefined);
+  if (vals.length < 2) return null;
+  const best = metric.better === 'lower' ? Math.min(...vals) : Math.max(...vals);
+  return vals.filter(v => v === best).length === vals.length ? null : best;
+}
+
+function renderModelCharts(models, runs) {
+  const done = runs.filter(r => r && r.metrics);
+  document.getElementById('mcCharts').innerHTML = MC_METRICS.map(metric => {
+    const vals = models.map((m, i) => mcValue(runs[i], metric.key));
+    const max = Math.max(...vals.filter(v => v !== null && v !== undefined), 0) || 1;
+    const best = mcBest(metric, runs);
+    const bars = models.map((m, i) => {
+      const v = vals[i];
+      const pending = runs[i] === undefined;
+      const text = pending ? 'running...' : v === null || v === undefined ? 'n/a'
+        : metric.key === 'hallucinated' ? (v ? 'Yes' : 'No') : v + metric.unit;
+      const width = v ? Math.max(4, (v / max) * 100) : 0;
+      const isBest = best !== null && v === best;
+      return `
+        <div class="mc-bar-row">
+          <span class="mc-bar-label">${escapeHtml(m)}</span>
+          <div class="mc-bar-track"><div class="mc-bar${pending ? ' pending' : ''}" style="width:${width}%;background:${MC_COLORS[i % MC_COLORS.length]};"></div></div>
+          <span class="mc-bar-value">${text}${isBest ? ' <span class="mc-best">best</span>' : ''}</span>
+        </div>`;
+    }).join('');
+    const hint = metric.better === 'info' ? 'informational' : `${metric.better} is better`;
+    return `
+      <div class="mc-chart">
+        <div class="mc-chart-title">${metric.label}<span>${hint}</span></div>
+        <div class="mc-chart-desc">${metric.desc}</div>
+        ${bars}
+      </div>`;
+  }).join('');
+
+  const header = `<tr><th>Parameter</th>${models.map((m, i) => `<th><span class="mc-dot" style="background:${MC_COLORS[i % MC_COLORS.length]}"></span>${escapeHtml(m)}</th>`).join('')}</tr>`;
+  const rows = MC_METRICS.map(metric => {
+    const best = mcBest(metric, runs);
+    return `<tr><td><b>${metric.label}</b></td>${models.map((m, i) => {
+      const v = mcValue(runs[i], metric.key);
+      const t = runs[i] === undefined ? '...' : v === null || v === undefined ? 'n/a' : metric.key === 'hallucinated' ? (v ? 'Yes' : 'No') : v + metric.unit;
+      return `<td class="${best !== null && v === best ? 'mc-cell-best' : ''}">${t}</td>`;
+    }).join('')}</tr>`;
+  }).join('');
+  const guardRow = `<tr><td><b>Guardrail result</b></td>${models.map((m, i) => {
+    const g = runs[i] && runs[i].guardrails;
+    return `<td>${runs[i] === undefined ? '...' : !g ? '-' : g.blocked ? 'Blocked: ' + escapeHtml(GUARDRAIL_NAMES[g.triggered] || g.triggered) : (g.output_warnings || []).length ? 'Passed with warning' : 'Passed'}</td>`;
+  }).join('')}</tr>`;
+  document.getElementById('mcTable').innerHTML = header + rows + guardRow;
+
+  if (done.length === models.length && done.length > 1) {
+    const winners = MC_METRICS.filter(m => m.better !== 'info').map(metric => {
+      const best = mcBest(metric, runs);
+      if (best === null) return `<li><b>${metric.label}:</b> all models equal</li>`;
+      const who = models.filter((m, i) => mcValue(runs[i], metric.key) === best);
+      return `<li><b>${metric.label}:</b> ${who.map(escapeHtml).join(', ')}</li>`;
+    }).join('');
+    const box = document.getElementById('mcVerdict');
+    box.innerHTML = `<b>Live result for this question:</b><ul style="margin:6px 0 4px;padding-left:18px;">${winners}</ul>
+      <span style="font-size:12px;color:var(--muted);">Correctness can't be judged automatically for a new question: read the answers above. The manually scored accuracy for each category is on the Model Evaluation page.</span>`;
+    box.style.display = 'block';
+  }
+}
+
+function renderModelExplanations(models, runs) {
+  const box = document.getElementById('mcExplain');
+  const rows = models.map((m, i) => ({ m, r: runs[i] })).filter(x => x.r && x.r.metrics);
+  if (!rows.length) { box.style.display = 'none'; return; }
+  const failed = models.filter((m, i) => !(runs[i] && runs[i].metrics));
+  const val = (x, k) => mcValue(x.r, k);
+  const withVal = k => rows.filter(x => typeof val(x, k) === 'number');
+  const hi = k => withVal(k).reduce((a, b) => val(b, k) > val(a, k) ? b : a);
+  const lo = k => withVal(k).reduce((a, b) => val(b, k) < val(a, k) ? b : a);
+  const b = s => `<b>${escapeHtml(s)}</b>`;
+  const lines = [];
+
+  if (withVal('latency_seconds').length) {
+    const f = lo('latency_seconds'), s = hi('latency_seconds');
+    lines.push(['Response latency', `${b(f.m)} replied fastest (${val(f, 'latency_seconds')}s) and ${b(s.m)} slowest (${val(s, 'latency_seconds')}s): this is how long you wait for the full answer.`]);
+  }
+  if (withVal('tokens').length) {
+    const l = hi('tokens'), sh = lo('tokens');
+    lines.push(['Tokens generated', `${b(l.m)} wrote the longest answer (${val(l, 'tokens')} tokens) and ${b(sh.m)} the shortest (${val(sh, 'tokens')}); more tokens just means a longer answer, not a better one.`]);
+  }
+  if (withVal('tokens_per_second').length) {
+    const f = hi('tokens_per_second'), s = lo('tokens_per_second');
+    lines.push(['Generation speed', `${b(f.m)} produced text fastest (${val(f, 'tokens_per_second')} tokens/sec) and ${b(s.m)} slowest (${val(s, 'tokens_per_second')}); smaller models usually type faster.`]);
+  }
+  if (withVal('load_seconds').length) {
+    const warm = withVal('load_seconds').filter(x => val(x, 'load_seconds') === 0).map(x => x.m);
+    const l = hi('load_seconds');
+    lines.push(['Model load time', `${warm.length ? warm.map(b).join(', ') + ' was already in memory (0s); ' : ''}${val(l, 'load_seconds') ? `${b(l.m)} took longest to load (${val(l, 'load_seconds')}s). This cost is only paid the first time a model is used.` : 'no model needed loading.'}`]);
+  }
+  if (withVal('memory_mb').length) {
+    const s = lo('memory_mb'), g = hi('memory_mb');
+    lines.push(['Memory used', `${b(s.m)} needs the least memory (${val(s, 'memory_mb')} MB) and ${b(g.m)} the most (${val(g, 'memory_mb')} MB); bigger models need more GPU/RAM to run.`]);
+  }
+  if (withVal('coverage').length) {
+    const c = hi('coverage'), zero = withVal('coverage').filter(x => val(x, 'coverage') === 0).map(x => x.m);
+    lines.push(['Context coverage', `${val(c, 'coverage') ? `${b(c.m)} used the most of the retrieved code (${val(c, 'coverage')}%)` : 'No model mentioned the retrieved files or functions'}${zero.length && val(c, 'coverage') ? `; ${zero.map(b).join(', ')} mentioned none of it (0%), so ${zero.length > 1 ? 'they' : 'it'} answered without really using the context` : ''}.`]);
+  }
+  const hall = rows.filter(x => val(x, 'hallucinated') === 1).map(x => x.m);
+  lines.push(['Hallucination flag', hall.length
+    ? `${hall.map(b).join(', ')} mentioned a file that doesn't exist in the codebase, so the answer is partly made up.`
+    : 'No model mentioned a file that doesn\'t exist in the codebase, so there are no made-up file names in these answers.']);
+  if (failed.length) {
+    lines.push(['n/a values', `${failed.map(b).join(', ')} failed on this run, so its values are shown as n/a.`]);
+  }
+
+  box.innerHTML = `<h3 style="margin:0 0 10px;font-size:15px;">What these numbers mean</h3>
+    <ul class="mc-explain-list">${lines.map(([k, t]) => `<li><span class="mc-explain-key">${k}</span>${t}</li>`).join('')}</ul>`;
+  box.style.display = 'block';
+}
+
+function renderModelAnswers(models, runs) {
+  document.getElementById('mcAnswers').innerHTML = models.map((m, i) => {
+    const r = runs[i];
+    const color = MC_COLORS[i % MC_COLORS.length];
+    const body = r === undefined
+      ? `<div class="placeholder"><span class="spinner"></span>${i === runs.length ? 'Generating...' : 'Waiting...'}</div>`
+      : `<div class="answer">${escapeHtml((r.answer || '').trim() || '(no answer)')}</div>
+         ${((r.guardrails && r.guardrails.output_warnings) || []).map(w => `<div class="inline-warn">&#9888; ${escapeHtml(w)}</div>`).join('')}`;
+    const lat = r && r.metrics ? `${r.metrics.latency_seconds}s &middot; ${r.metrics.tokens ?? 0} tok` : '';
+    return `
+      <div class="panel mc-answer" style="border-top:3px solid ${color};">
+        <div class="panel-header"><span class="mc-model" style="color:${color}">${escapeHtml(m)}</span><span class="latency">${lat}</span></div>
+        ${body}
+      </div>`;
+  }).join('');
+}
+
+async function askModels(question) {
+  const btn = document.getElementById('askBtn');
+  const status = document.getElementById('status');
+  btn.disabled = true;
+  clearGuardUi([]);
+  document.getElementById('mcVerdict').style.display = 'none';
+  document.getElementById('mcExplain').style.display = 'none';
+
+  let models;
+  try {
+    models = (await (await fetch('/models')).json()).models;
+  } catch (e) { status.textContent = 'Could not load model list.'; btn.disabled = false; return; }
+
+  const runs = [];
+  const started = Date.now();
+  renderModelAnswers(models, runs);
+  renderModelCharts(models, runs);
+  pipeStart(true);
+
+  for (let i = 0; i < models.length; i++) {
+    status.innerHTML = `<span class="spinner"></span>Running model ${i + 1} of ${models.length}: <b>${escapeHtml(models[i])}</b> (CPU inference can take 20-90s per model)`;
+    try {
+      const res = await fetch('/model-run', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question, model: models[i] })
+      });
+      const data = await parseResponse(res);
+      runs.push(data);
+      if (i === 0) renderGuardStatus(data.guardrails);
+      if (data.guardrails && data.guardrails.blocked && data.guardrails.triggered !== 'relevance_threshold') {
+        while (runs.length < models.length) runs.push(data);
+        break;
+      }
+    } catch (err) {
+      runs.push({ model: models[i], answer: 'Error: ' + err.message, metrics: null });
+    }
+    renderModelAnswers(models, runs);
+    renderModelCharts(models, runs);
+  }
+
+  renderModelAnswers(models, runs);
+  renderModelCharts(models, runs);
+  pipeFinish(runs[0] && runs[0].guardrails, true);
+  renderModelExplanations(models, runs);
+  document.getElementById('mcRunInfo').textContent = `${models.length} models · ${((Date.now() - started) / 1000).toFixed(1)}s total`;
+  status.textContent = `Done. Compared ${models.length} model(s) on the same question and context.`;
+  if (runs.some(r => r && r.metrics)) {
+    fetch('/history/models', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question, runs: runs.filter(r => r && r.metrics) }) })
+      .then(() => { document.getElementById('navHistoryCount').textContent = ''; })
+      .catch(() => {});
+  }
+  btn.disabled = false;
 }
 
 async function loadModelList() {
@@ -852,6 +1101,7 @@ async function ask() {
   if (!question) return;
 
   if (queryMode === 'custom') return askCustom(question);
+  if (queryMode === 'models') return askModels(question);
 
   const btn = document.getElementById('askBtn');
   const status = document.getElementById('status');
@@ -943,6 +1193,44 @@ async function askCustom(question) {
 }
 
 const GUARDRAIL_NAMES = {};
+
+function historyModelsHtml(e) {
+  const runs = e.runs || [];
+  const notes = e.metric_notes || {};
+  const metric = (key, label, unit, better) => {
+    const vals = runs.map(r => (r.metrics || {})[key]);
+    const nums = vals.filter(v => typeof v === 'number');
+    if (!nums.length) return '';
+    const max = Math.max(...nums, 0) || 1;
+    const allSame = nums.length > 1 && nums.every(v => v === nums[0]);
+    const best = nums.length > 1 && !allSame && better !== 'info' ? (better === 'lower' ? Math.min(...nums) : Math.max(...nums)) : null;
+    const fmt = v => typeof v !== 'number' ? 'not recorded' : key === 'hallucinated' ? (v ? 'Yes' : 'No') : v + unit;
+    return `<div class="mc-chart"><div class="mc-chart-title">${label}<span>${better === 'info' ? 'informational' : better + ' is better'}</span></div>
+      ${notes[key] ? `<div class="mc-chart-desc">${escapeHtml(notes[key])}</div>` : '<div class="mc-chart-desc">Measured in the run.</div>'}
+      ${runs.map((r, i) => {
+        const v = vals[i];
+        return `<div class="mc-bar-row"><span class="mc-bar-label">${escapeHtml(r.model)}</span>
+          <div class="mc-bar-track"><div class="mc-bar" style="width:${typeof v === 'number' && v ? Math.max(4, v / max * 100) : 0}%;background:${MC_COLORS[i % MC_COLORS.length]};"></div></div>
+          <span class="mc-bar-value">${fmt(v)}${best !== null && v === best ? ' <span class="mc-best">best</span>' : ''}</span></div>`;
+      }).join('')}</div>`;
+  };
+  return `
+    ${e.source ? `<div class="mc-note" style="margin-bottom:12px;">Source: ${escapeHtml(e.source)}</div>` : ''}
+    <div class="mc-answers" style="margin-bottom:14px;">${runs.map((r, i) => `
+      <div class="panel mc-answer" style="border-top:3px solid ${MC_COLORS[i % MC_COLORS.length]};">
+        <div class="panel-header"><span class="mc-model" style="color:${MC_COLORS[i % MC_COLORS.length]}">${escapeHtml(r.model)}</span>
+          ${r.verdict ? `<span class="verdict-badge verdict-${escapeHtml(r.verdict)}">${escapeHtml(r.verdict.replace('_', ' '))}</span>` : ''}</div>
+        <div class="kb-code">${escapeHtml((r.answer || '').trim() || '(no answer)')}</div>
+        ${r.notes ? `<div class="model-notes">${escapeHtml(r.notes)}</div>` : ''}
+      </div>`).join('')}</div>
+    <div class="mc-charts">
+      ${metric('latency_seconds', 'Response latency', 's', 'lower')}
+      ${metric('tokens', 'Tokens generated', '', 'info')}
+      ${metric('tokens_per_second', 'Generation speed', ' tok/s', 'higher')}
+      ${metric('memory_mb', 'Memory / model size', ' MB', 'lower')}
+      ${metric('coverage', 'Context coverage', '%', 'higher')}
+    </div>`;
+}
 
 function historyGuardTag(g) {
   if (!g) return '';
